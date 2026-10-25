@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ai_rpg — text-based LLM Dungeon Master</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1115; --panel: #161a22; --line: #262c38;
+    --text: #d7dce5; --dim: #8b93a3; --accent: #e0b34c;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; font: 15px/1.45 system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--text); display: flex;
+  }
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid var(--line);
+    font-weight: 600; display: flex; align-items: baseline; gap: 10px;
+  }
+  header small { color: var(--dim); font-weight: 400; }
+  #chat {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .msg { max-width: 75ch; padding: 8px 12px; border-radius: 10px; white-space: pre-wrap; }
+  .msg.player { align-self: flex-end; background: #1d2735; border: 1px solid var(--line); }
+  .msg.dm { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
+  .msg.dm.pending { color: var(--dim); }
+  form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  form input {
+    flex: 1; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; color: var(--text); padding: 10px 12px; font: inherit;
+  }
+  form button {
+    background: var(--accent); color: #1a1a1a; border: none; border-radius: 8px;
+    padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  form button:disabled { opacity: .5; cursor: default; }
+  aside {
+    width: 300px; border-left: 1px solid var(--line); padding: 16px;
+    display: flex; flex-direction: column; gap: 18px; background: var(--panel);
+  }
+  aside h2 {
+    margin: 0 0 6px; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--dim);
+  }
+  .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 6px; background: var(--dim); vertical-align: baseline;
+  }
+  .ok .dot { background: #4caf50; }
+  .err .dot { background: #e05252; }
+  .kv { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--dim); }
+  .kv b { color: var(--text); font-weight: 500; text-align: right; word-break: break-all; }
+  #llm-hello, #dice-log, #pc-note { font-size: 13px; color: var(--dim); margin: 6px 0 0; }
+  @media (max-width: 720px) { body { flex-direction: column; } aside { width: auto; border-left: none; border-top: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<main>
+  <header>ai_rpg <small id="subtitle">text-based LLM Dungeon Master</small></header>
+  <div id="chat" aria-live="polite"></div>
+  <form id="action-form" autocomplete="off">
+    <input id="action-input" name="text" placeholder="What does your character do?" required maxlength="4000">
+    <button id="action-send" type="submit">Send</button>
+  </form>
+</main>
+<aside>
+  <section id="llm-status">
+    <h2>LLM</h2>
+    <div><span class="dot"></span><span id="llm-state">checking&hellip;</span></div>
+    <p id="llm-hello"></p>
+    <div class="kv" style="margin-top:8px"><span>model</span><b id="model">&mdash;</b></div>
+    <div class="kv"><span>endpoint</span><b id="base-url">&mdash;</b></div>
+  </section>
+  <section>
+    <h2>Dice</h2>
+    <div id="dice-log">no rolls yet &mdash; arrives with M1</div>
+  </section>
+  <section>
+    <h2>Character</h2>
+    <div id="pc-note">no sheet yet &mdash; arrives with M1</div>
+  </section>
+  <section>
+    <h2>Milestone</h2>
+    <div id="milestone" class="kv"><span>build</span><b>&mdash;</b></div>
+  </section>
+</aside>
+<script>
+const chat = document.getElementById('chat');
+const form = document.getElementById('action-form');
+const input = document.getElementById('action-input');
+const send = document.getElementById('action-send');
+let busy = false;
+
+function addMsg(cls, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+async function j(path) {
+  const r = await fetch(path);
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    throw new Error(body.detail || r.status + ' ' + r.statusText);
+  }
+  return r.json();
+}
+
+function parseFrames(buf) {
+  // Yields {event, data} per complete SSE frame; returns the leftover tail.
+  const frames = [];
+  let idx;
+  while ((idx = buf.indexOf('\n\n')) >= 0) {
+    const raw = buf.slice(0, idx);
+    buf = buf.slice(idx + 2);
+    let event = 'message';
+    const dataLines = [];
+    for (const line of raw.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+    }
+    frames.push({ event, data: dataLines.join('\n') });
+  }
+  return { frames, rest: buf };
+}
+
+async function boot() {
+  const box = document.getElementById('llm-status');
+  try {
+    const st = await j('/api/status');
+    document.getElementById('model').textContent = st.model;
+    document.getElementById('base-url').textContent = st.base_url;
+    document.getElementById('milestone').querySelector('b').textContent =
+      st.milestone + ' · v' + st.version;
+  } catch (e) {
+    document.getElementById('base-url').textContent = String(e);
+  }
+  try {
+    const p = await j('/api/ping');
+    box.classList.add('ok');
+    document.getElementById('llm-state').textContent = 'online';
+    document.getElementById('llm-hello').textContent = '“' + p.reply + '”';
+  } catch (e) {
+    box.classList.add('err');
+    document.getElementById('llm-state').textContent = 'offline';
+    document.getElementById('llm-hello').textContent = e.message || String(e);
+  }
+}
+
+form.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (busy) return;
+  const text = input.value.trim();
+  if (!text) return;
+  busy = true;
+  send.disabled = true;
+  input.value = '';
+  addMsg('player', text);
+  const dm = addMsg('dm pending', '…');
+  let written = false;
+  try {
+    const r = await fetch('/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!r.ok || !r.body) throw new Error(r.status + ' ' + r.statusText);
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const { frames, rest } = parseFrames(buf);
+      buf = rest;
+      for (const f of frames) {
+        if (f.event === 'narration') {
+          dm.classList.remove('pending');
+          dm.textContent += f.data;
+          chat.scrollTop = chat.scrollHeight;
+          written = true;
+        } else if (f.event === 'error') {
+          dm.classList.remove('pending');
+          dm.textContent = '⚠ ' + f.data;
+        }
+      }
+    }
+    if (!written) { dm.classList.remove('pending'); dm.textContent = '(no narration)'; }
+  } catch (e) {
+    dm.classList.remove('pending');
+    dm.textContent = '⚠ ' + (e.message || e);
+  } finally {
+    busy = false;
+    send.disabled = false;
+    input.focus();
+  }
+});
+
+boot();
+</script>
+</body>
+</html>

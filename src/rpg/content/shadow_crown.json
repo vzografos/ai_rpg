@@ -1,0 +1,16 @@
+{
+  "title": "The Shadow Crown",
+  "status": "placeholder",
+  "milestone": "M3",
+  "note": "Pre-authored adventure: spine + 3-5 locations + 6-10 NPCs with agendas + 3 encounters + a finale. Schema lands in M3; this stub keeps the content path importable and the layout honest from M0.",
+  "spine": {
+    "premise": "",
+    "stakes": "",
+    "antagonist": "",
+    "beats": [],
+    "finale": ""
+  },
+  "locations": [],
+  "npcs": [],
+  "encounters": []
+}

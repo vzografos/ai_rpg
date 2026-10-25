@@ -1,0 +1,51 @@
+# ai_rpg — strict Docker (constraint C1). The host ever needs only Docker.
+#
+# Dev loop (source bind-mount, deps synced IN the container, uvicorn reload):
+#   docker compose -f docker/compose.yml --profile dev up --build
+# Tests (inside the container — never on the host):
+#   docker compose -f docker/compose.yml run --rm test
+# Local LLM (optional sibling service; then set LLM_* in .env):
+#   docker compose -f docker/compose.yml --profile dev --profile ollama up --build
+#   docker compose -f docker/compose.yml --profile ollama exec ollama ollama pull llama3.1:8b
+
+name: ai-rpg
+
+x-app-base: &app-base
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  image: ai-rpg:dev
+  env_file:
+    - path: ../.env
+      required: false
+  environment:
+    RPG_DATA: /app/data
+  volumes:
+    - ../src:/app/src:z
+    - ../tests:/app/tests:z
+    - rpg-data:/app/data
+
+services:
+  app:
+    <<: *app-base
+    profiles: [dev]
+    # Sync deps from the in-image lockfile, then serve with reload.
+    entrypoint: ["/bin/sh", "-c", "uv sync --no-dev --frozen && exec uv run uvicorn rpg.web.app:app --host 0.0.0.0 --port 8080 --reload"]
+    ports:
+      - "8080:8080"
+
+  test:
+    <<: *app-base
+    entrypoint: ["/bin/sh", "-c", "uv sync --no-dev --frozen && exec uv run pytest -v"]
+
+  # Optional local model. Reachable from `app` as http://ollama:11434/v1.
+  ollama:
+    profiles: [ollama]
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    # Give the LXC host's GPU access here if you want local inference to be fast.
+
+volumes:
+  rpg-data:
+  ollama-data:
