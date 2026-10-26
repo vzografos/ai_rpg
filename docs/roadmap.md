@@ -96,3 +96,80 @@ tests, 2 skipped); 100% engine statement coverage; `roll` output
 byte-identical under the same seed across two separate container runs
 (literals pinned in `tests/engine/test_determinism.py`); a scripted
 3-combatant encounter resolves entirely by the engine, deterministically.
+
+### M2 — world state, events, context: log is the authority, tables are a view (2026-10-26)
+
+**Decision:** M2 lands the state/memory layout state layer as three engine modules.
+`engine/state.py` — the entity records (`PlayerCharacter` wrapping the M1
+`CharacterSheet`, `Npc`, `Item`, `Quest`, `Location`, `Fact`,
+`CombatantRecord`, `CombatState`) plus `WorldState.apply_event(kind,
+payload, turn)`, the **single validated, clamped writer** (every event kind
+checks names/ranges/known-exits/known-combatants and rejects with
+`ValueError`; no other code path mutates the world). `engine/events.py` —
+the SQLite schema (state/memory layout: `pc`, `npc`, `item`, `quest`, `location`, `fact`,
+append-only `event`, per-turn `snapshot`, `message` with role restricted to
+user/narration), `WorldDB` and `rebuild_world`. `engine/context.py` — the
+context builder (stable head + volatile tail + trimmed transcript +
+`Context`/`ContextMeter` + `dump_context`).
+
+**Semantics pinned beyond the M2 bullet list:**
+
+1. **The event log is the authority; the entity tables are a materialized
+   view.** `WorldDB.commit(world, events, messages)` is one transaction
+   (BEGIN IMMEDIATE → insert events → resync tables → insert the
+   per-turn snapshot → insert messages → COMMIT) and then `world.turn +=
+   1`; the contract is that the caller has *already* applied the events to
+   the live world. `load_world` replays the log, sets `turn` to the
+   snapshot count, verifies the replay against the last committed snapshot
+   (corrupt log → `WorldCorruptionError`, no world), and resyncs the
+   tables. This resolves the M1 follow-up: combatant/sheet mutations are
+   now log-authoritative via the `pc_*` and `combat_*` events.
+2. **Combat lives only in the log** — there is deliberately no `combat`
+   table. `combat_begin/attack/turn/condition/heal/end` carry *committed
+   results* (M1's rolls, initiative order, HP, death-save counters);
+   replay applies them, it never re-rolls. The M1 `Combat` object stays
+   in-memory for play; the M3 loop will bridge (the property test already
+   does exactly that bridging with the real M1 `Combat` as the source of
+   the committed payloads). Replay backstops mirror M1: an attack requires
+   a living, acting attacker; a dead defender is an error; a stable
+   defender is a no-op; the nat-20 revive is only legal at exactly 1 HP
+   with (successes, failures) = (1, 0); 0 HP requires a committed death
+   save, never (3, 3).
+3. **Snapshots name the world at the committed turn** (fingerprint taken
+   before the turn increment); a no-op turn (e.g. a missed attack) may
+   legitimately re-name the identical state — the guarantee is presence
+   per turn, not distinctness. The log must be contiguous from seq 1
+   (`rebuild_world` rejects gaps/duplicates).
+4. **Context builder** per state/memory layout: stable head = DM identity + 5e rules
+   summary + GM standards + keeper discipline (templates in
+   `llm/prompts.py`, the only home for prompts). Volatile tail = the state
+   block headed *"Current game state (engine-provided, not spoken by any
+   player)"* (location/exits, sheet, NPC roster, quests, items, facts,
+   combat) + the trimmed transcript (last 12 lines, trim-oldest-until-fit,
+   floor of 2) + the player line. Keeper-only data (NPC agendas) must
+   never enter the tail — pinned by test. Metering is the char heuristic
+   `ceil(len/4)` with a default budget of 8000 tokens (a real tokenizer is
+   an M5 upgrade); `dump_context` / `GET /api/dump-context` /
+   `rpg.cli dump-context` print the metered layout.
+5. **Milestone marker moved to "M2" now** (the M1 log said it would wait
+   for M3): the world-state endpoints (`GET /api/world`) and the
+   dump-context surface are M2 deliverables by milestone M6; the turn pipeline, dice
+   frames and the static-page placeholders remain M3.
+6. **M2 CLI** (`rpg.cli new [name] [--hp] [--db]`, `turn TEXT NARRATION`,
+   `world-status`, `dump-context`) is a headless, no-LLM commit surface:
+   `turn` records the user line + narration and commits a zero-event turn
+   (snapshot still names the state); real events arrive with the M3
+   pipeline.
+
+**Acceptance verified (2026-10-26):** `make check` green (ruff + 222
+tests, 2 skipped). The M2 property test
+(`tests/engine/test_events_property.py`) plays 40 turns × 5 seeds of
+random operations — sheet/entity/fact mutations and combat bridged
+through the *real* M1 `Combat` — through `WorldDB.commit`, then asserts
+three views of the same world agree: the materialized tables
+(`load_from_tables`), the pure event-log replay (`rebuild_world`), and a
+restart on the same file (`load_world`, snapshot-verified); plus
+"every committed turn carries a snapshot". Kill+restart also verified
+live: on the dev container, `rpg.cli new` + two committed turns,
+`docker compose stop app` (mid-session kill), `start`, and
+`world-status` output byte-identical before/after.

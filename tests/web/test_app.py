@@ -2,12 +2,15 @@
 
 The provider is injected by patching `rpg.web.app.build_provider` before the
 TestClient enters its lifespan, so the app wires up the fake — no network.
-These tests pin the transport contract (endpoints + frame grammar).
+The DB path is pointed at a temp dir (RPG_DATA), so the tests stay hermetic
+and never touch the shared rpg-data volume. These tests pin the transport
+contract (endpoints + frame grammar).
 """
 
 from __future__ import annotations
 
 import json
+import tempfile
 
 from _pytest.monkeypatch import MonkeyPatch
 from fastapi.testclient import TestClient
@@ -19,6 +22,8 @@ from tests.conftest import FakeProvider
 def web_client(monkeypatch: MonkeyPatch, fake: FakeProvider) -> TestClient:
     # app.py calls build_provider from its own module namespace — patch it there.
     monkeypatch.setattr(app_module, "build_provider", lambda env=None: fake)
+    # Hermetic DB: point RPG_DATA at a temp dir, never the shared rpg-data volume.
+    monkeypatch.setenv("RPG_DATA", tempfile.mkdtemp(prefix="rpg-test-"))
     return TestClient(app_module.app)
 
 
@@ -56,7 +61,7 @@ def test_status_reports_model(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["app"] == "ai_rpg"
-    assert body["milestone"] == "M0"
+    assert body["milestone"] == "M2"
     assert body["model"] == "test-model"
     assert body["base_url"] == "fake://test"
 
