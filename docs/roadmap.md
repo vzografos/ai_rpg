@@ -51,3 +51,48 @@ With no `.env` at all, the provider falls back to that Ollama sibling.
 
 **Follow-ups:** record per-model eval results in the M6 report; if the LXC
 box gets a GPU, re-run the local-model table with bigger models.
+
+### M1 — deterministic core: engine layout, combat semantics, derived level (2026-10-26)
+
+**Decision:** M1 lands as four headless modules — `engine/dice.py`
+(formula grammar `NdS[kh|kl K][±M]`; `RandomSource` protocol whose
+`roll(n, sides) -> int` returns the *sum* of n dice, so the parser asks for
+one die at a time; `SeededSource`/`SystemSource`; `RollResult` with a
+canonical byte-stable `str()`), `engine/sheet.py` (**new module** — not in
+the documented layout layout; the character-sheet + XP-table deliverable needed a
+home), `engine/rules.py` (`ability_check`/`ability_save`; advantage =
+2d20kh1, disadvantage = 2d20kl1, both together cancel; natural 20 always
+succeeds, natural 1 always fails), `engine/combat.py` (initiative d20 + Dex
+with ties by name; to-hit vs AC; damage dice with crits doubling the dice
+once; conditions poisoned/stunned/prone/unconscious; death saves d20 vs 10).
+Plus a headless `roll` CLI subcommand (`python -m rpg.cli roll "2d20kh1"
+--seed 42`) that makes the byte-identical acceptance demoable in-container
+with no LLM.
+
+**Rationale / semantics pinned beyond the M1 bullet list:**
+1. **Level is derived from total XP** (`CharacterSheet.level` is a
+   property; only `xp` is stored) — the sheet cannot drift from its own
+   numbers (hard constraint: the LLM never owns numbers).
+2. **5e combat semantics**: a creature at 0 HP is *unconscious* → it
+   cannot act (skipped by `end_turn`, `can_act` False, cannot attack);
+   *stable* (3 death-save successes) is out of the fight; `Combat.is_over`
+   = at most one alive combatant; a natural 20 death save revives at 1 HP.
+   The engine is a *total state machine* — every call terminates; whether a
+   *played* encounter terminates depends on the playing policy and the
+   source (a fixed seed can cycle on the revive-at-1 rule — the
+   determinism test uses a terminating seed behind a turn guard).
+3. **Web surface deliberately untouched in M1** (headless by plan):
+   `/api/status` and the CLI keep the `"M0"` milestone marker until M3
+   wires the turn pipeline; the static page's "arrives with M1" placeholder
+   texts (dice log, sheet note) get fixed in M3 together with the
+   dice/state frames.
+4. **No dependency changes.** Coverage gate verified with a one-shot
+   `uv run --with pytest-cov pytest --cov=rpg.engine` — 100% of engine
+   paths (425/425 statements); `pytest-cov` is not in `pyproject.toml`
+   unless the coverage gate becomes permanent (revisit at M6).
+
+**Acceptance verified (2026-10-26):** `make check` green (ruff + 137
+tests, 2 skipped); 100% engine statement coverage; `roll` output
+byte-identical under the same seed across two separate container runs
+(literals pinned in `tests/engine/test_determinism.py`); a scripted
+3-combatant encounter resolves entirely by the engine, deterministically.

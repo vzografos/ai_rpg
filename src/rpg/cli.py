@@ -8,6 +8,7 @@ Usage (inside the container):
     uv run python -m rpg.cli status
     uv run python -m rpg.cli ping
     uv run python -m rpg.cli say "what do I do?"
+    uv run python -m rpg.cli roll "2d20kh1" [--seed 42]
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import json
 import sys
 
 from rpg import __version__
+from rpg.engine.dice import SeededSource, SystemSource, roll_dice
 from rpg.llm import prompts
 from rpg.llm.provider import LLMProvider, ProviderConfig, ProviderError
 
@@ -31,8 +33,20 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("ping", help="one-shot LLM round-trip (the M0 hello signal)")
     say = sub.add_parser("say", help="run the M0 one-shot 'turn' with the given player text")
     say.add_argument("text", help="what the player's character does")
+    roll = sub.add_parser("roll", help="roll a dice formula headless (no LLM)")
+    roll.add_argument("formula", help='e.g. "2d20kh1+3"')
+    roll.add_argument("--seed", type=int, default=None, help="seed for a deterministic roll")
 
     args = parser.parse_args(argv)
+
+    if args.command == "roll":
+        try:
+            source = SeededSource(args.seed) if args.seed is not None else SystemSource()
+            print(str(roll_dice(args.formula, source)))
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        return 0
 
     provider = LLMProvider(ProviderConfig.from_env())
     try:

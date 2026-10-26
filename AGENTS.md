@@ -26,6 +26,8 @@ Decision log in `docs/roadmap.md`.**
 
 ## Conventions
 
+- **Do not spawn sub-agents** (task/explore agents) for this project's work —
+  do the work in the main session instead (user instruction, 2026-10-25).
 - Python 3.11+, `uv` manages the env (lockfile `uv.lock` is committed).
 - After changing dependencies in `pyproject.toml`: `uv lock` (host uv is
   fine for lockfile generation), rebuild the image (`make build`).
