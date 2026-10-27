@@ -30,6 +30,10 @@
   .msg.player { align-self: flex-end; background: #1d2735; border: 1px solid var(--line); }
   .msg.dm { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
   .msg.dm.pending { color: var(--dim); }
+  .msg.system {
+    align-self: center; background: none; border: none; padding: 2px;
+    color: var(--accent); font-size: 13px; font-style: italic;
+  }
   form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
   form input {
     flex: 1; background: var(--panel); border: 1px solid var(--line);
@@ -43,6 +47,7 @@
   aside {
     width: 300px; border-left: 1px solid var(--line); padding: 16px;
     display: flex; flex-direction: column; gap: 18px; background: var(--panel);
+    overflow-y: auto;
   }
   aside h2 {
     margin: 0 0 6px; font-size: 12px; text-transform: uppercase;
@@ -56,7 +61,15 @@
   .err .dot { background: #e05252; }
   .kv { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--dim); }
   .kv b { color: var(--text); font-weight: 500; text-align: right; word-break: break-all; }
-  #llm-hello, #dice-log, #pc-note { font-size: 13px; color: var(--dim); margin: 6px 0 0; }
+  #llm-hello, #dice-log, #quest-log { font-size: 13px; color: var(--dim); margin: 6px 0 0; }
+  #quest-log li { margin: 2px 0; }
+  #quest-log .current { color: var(--text); }
+  #new-session {
+    width: 100%; margin-top: 6px; background: none; border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 8px; padding: 8px; font: inherit; cursor: pointer;
+  }
+  #new-session:disabled { opacity: .4; cursor: default; }
+  .hp-low { color: #e05252; }
   @media (max-width: 720px) { body { flex-direction: column; } aside { width: auto; border-left: none; border-top: 1px solid var(--line); } }
 </style>
 </head>
@@ -70,6 +83,12 @@
   </form>
 </main>
 <aside>
+  <section id="session">
+    <h2>Session</h2>
+    <div class="kv"><span>turn</span><b id="turn-count">&mdash;</b></div>
+    <div class="kv"><span>tokens</span><b id="token-count">&mdash;</b></div>
+    <button id="new-session" type="button">New session (The Shadow Crown)</button>
+  </section>
   <section id="llm-status">
     <h2>LLM</h2>
     <div><span class="dot"></span><span id="llm-state">checking&hellip;</span></div>
@@ -78,12 +97,16 @@
     <div class="kv"><span>endpoint</span><b id="base-url">&mdash;</b></div>
   </section>
   <section>
-    <h2>Dice</h2>
-    <div id="dice-log">no rolls yet &mdash; arrives with M1</div>
+    <h2>Character</h2>
+    <div id="pc-note">no sheet yet &mdash; start a session</div>
   </section>
   <section>
-    <h2>Character</h2>
-    <div id="pc-note">no sheet yet &mdash; arrives with M1</div>
+    <h2>Story</h2>
+    <ul id="quest-log"><li>no spine yet</li></ul>
+  </section>
+  <section>
+    <h2>Dice</h2>
+    <div id="dice-log">no rolls yet</div>
   </section>
   <section>
     <h2>Milestone</h2>
@@ -95,7 +118,12 @@ const chat = document.getElementById('chat');
 const form = document.getElementById('action-form');
 const input = document.getElementById('action-input');
 const send = document.getElementById('action-send');
+const newSessionBtn = document.getElementById('new-session');
+const pcNote = document.getElementById('pc-note');
+const questLog = document.getElementById('quest-log');
+const diceLog = document.getElementById('dice-log');
 let busy = false;
+let hasWorld = false;
 
 function addMsg(cls, text) {
   const div = document.createElement('div');
@@ -106,8 +134,8 @@ function addMsg(cls, text) {
   return div;
 }
 
-async function j(path) {
-  const r = await fetch(path);
+async function j(path, opts) {
+  const r = await fetch(path, opts);
   if (!r.ok) {
     const body = await r.json().catch(() => ({}));
     throw new Error(body.detail || r.status + ' ' + r.statusText);
@@ -133,6 +161,61 @@ function parseFrames(buf) {
   return { frames, rest: buf };
 }
 
+function renderState(data) {
+  hasWorld = true;
+  const pc = data.pc;
+  if (!pc) { pcNote.textContent = 'no sheet yet'; return; }
+  const hp = pc.hp + '/' + pc.max_hp;
+  const carrying = Object.entries(pc.inventory || {}).map(([n, q]) => q + 'x ' + n).join(', ');
+  const held = Object.values(data.items || {}).filter((it) => (it.holder || '').startsWith('pc:')).map((it) => it.name);
+  const lines = [
+    '<b>' + pc.name + '</b> · AC ' + pc.ac,
+    'HP <span class="' + (pc.hp <= Math.max(1, Math.floor(pc.max_hp / 3)) ? 'hp-low' : '') + '">' + hp + '</span> · gold ' + pc.gold + ' · XP ' + pc.xp,
+    'Location: ' + (pc.location || '(unlocated)'),
+  ];
+  const goods = [carrying, held.join(', ')].filter(Boolean).join(', ');
+  if (goods) lines.push('Carrying: ' + goods);
+  pcNote.innerHTML = lines.join('<br>');
+}
+
+function renderQuest(data) {
+  questLog.innerHTML = '';
+  const lines = data.quest_lines || [];
+  if (!lines.length) lines.push(data.is_over ? 'The story is over.' : 'the spine is finished');
+  for (const line of lines) {
+    const li = document.createElement('li');
+    if (line.startsWith('Current:')) li.className = 'current';
+    li.textContent = line.replace('Current: ', '');
+    questLog.appendChild(li);
+  }
+  for (const done of data.completed || []) {
+    const li = document.createElement('li');
+    li.textContent = '✓ ' + done;
+    questLog.appendChild(li);
+  }
+}
+
+function renderDice(data) {
+  const roll = JSON.parse(data);
+  const parts = [roll.label || 'roll'];
+  if (roll.d20 !== undefined) parts.push('d20 ' + roll.d20);
+  if (roll.total !== undefined) parts.push('= ' + roll.total);
+  if (roll.dc !== undefined) parts.push('vs DC ' + roll.dc + (roll.success ? ' — success' : ' — fail'));
+  if (roll.ac !== undefined) parts.push('vs AC ' + roll.ac + (roll.hit ? ' — hit' : ' — miss'));
+  if (roll.critical) parts.push('CRITICAL');
+  if (roll.fumble) parts.push('fumble');
+  diceLog.innerHTML += parts.join(' ') + '<br>';
+}
+
+function restoreTranscript() {
+  return j('/api/messages').then((data) => {
+    for (const m of data.messages || []) {
+      if (m.turn === 0 && m.role === 'user' && m.content.startsWith('/new')) continue;
+      addMsg(m.role === 'user' ? 'player' : 'dm', m.content);
+    }
+  }).catch(() => {});
+}
+
 async function boot() {
   const box = document.getElementById('llm-status');
   try {
@@ -141,6 +224,8 @@ async function boot() {
     document.getElementById('base-url').textContent = st.base_url;
     document.getElementById('milestone').querySelector('b').textContent =
       st.milestone + ' · v' + st.version;
+    hasWorld = st.world;
+    newSessionBtn.disabled = st.world;
   } catch (e) {
     document.getElementById('base-url').textContent = String(e);
   }
@@ -154,7 +239,30 @@ async function boot() {
     document.getElementById('llm-state').textContent = 'offline';
     document.getElementById('llm-hello').textContent = e.message || String(e);
   }
+  if (hasWorld) {
+    await Promise.all([
+      j('/api/world').then((d) => renderState(d.world)).catch(() => {}),
+      j('/api/spine').then(renderQuest).catch(() => {}),
+      restoreTranscript(),
+    ]);
+  }
 }
+
+newSessionBtn.addEventListener('click', async () => {
+  if (busy) return;
+  try {
+    const r = await j('/api/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    hasWorld = true;
+    newSessionBtn.disabled = true;
+    chat.innerHTML = '';
+    addMsg('system', '— ' + (r.world.pc.description || 'a new session begins') + ' —');
+    renderState(r.world);
+    j('/api/spine').then(renderQuest).catch(() => {});
+    input.focus();
+  } catch (e) {
+    addMsg('system', '⚠ ' + (e.message || e));
+  }
+});
 
 form.addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -186,12 +294,29 @@ form.addEventListener('submit', async (ev) => {
       for (const f of frames) {
         if (f.event === 'narration') {
           dm.classList.remove('pending');
-          dm.textContent += f.data;
+          dm.textContent = JSON.parse(f.data).text;
           chat.scrollTop = chat.scrollHeight;
           written = true;
+        } else if (f.event === 'beat') {
+          const b = JSON.parse(f.data).beat;
+          if (b) addMsg('system', '— act ' + b.act + ': ' + b.text + ' —');
+        } else if (f.event === 'quest') {
+          renderQuest(JSON.parse(f.data));
+        } else if (f.event === 'state') {
+          const state = JSON.parse(f.data);
+          renderState(state);
+          if (state.turn !== undefined) document.getElementById('turn-count').textContent = state.turn;
+        } else if (f.event === 'dice') {
+          renderDice(f.data);
         } else if (f.event === 'error') {
-          dm.classList.remove('pending');
-          dm.textContent = '⚠ ' + f.data;
+          const e = JSON.parse(f.data);
+          addMsg('system', '⚠ ' + (e.error || f.data));
+        } else if (f.event === 'done') {
+          const d = JSON.parse(f.data);
+          if (d.usage && (d.usage.prompt_tokens || d.usage.completion_tokens)) {
+            document.getElementById('token-count').textContent =
+              (d.usage.prompt_tokens || 0) + ' in / ' + (d.usage.completion_tokens || 0) + ' out';
+          }
         }
       }
     }

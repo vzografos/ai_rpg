@@ -47,14 +47,16 @@ def estimate_tokens(text: str) -> int:
 def stable_head(world: WorldState, *, spine_now: str = "") -> str:
     """The cacheable system message (the state/memory layout, stable head).
 
-    M3 appends the spine [NOW] block (spine_now); M5 the campaign summary
-    (world.summary). NPC agendas and keeper-only details never appear here.
+    M3 appends the spine [NOW] block (spine_now) and the DM round loop's tool
+    conduct; M5 the campaign summary (world.summary). NPC agendas and
+    keeper-only details never appear here.
     """
     parts = [
         prompts.DM_IDENTITY,
         prompts.RULES_SUMMARY,
         prompts.GM_STANDARDS,
         prompts.KEEPER_DISCIPLINE,
+        prompts.DM_TOOL_CONDUCT,
     ]
     if spine_now:
         parts.append(f"[NOW]\n{spine_now}")

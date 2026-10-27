@@ -17,6 +17,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from rpg.dm.spine import StorySpine
 from rpg.engine.combat import CONDITIONS
 from rpg.engine.dice import parse_formula
 from rpg.engine.sheet import CharacterSheet, ability_modifier
@@ -286,6 +287,7 @@ class WorldState:
         self.locations: dict[str, Location] = {}
         self.facts: list[Fact] = []
         self.combat: CombatState | None = None
+        self.spine: StorySpine | None = None
         self.turn: int = 0
         self.summary: str = ""
 
@@ -301,6 +303,7 @@ class WorldState:
             and not self.locations
             and not self.facts
             and self.combat is None
+            and self.spine is None
         )
 
     def npc(self, name: str) -> Npc:
@@ -570,6 +573,24 @@ class WorldState:
                 return
         raise ValueError(f"fact not found: ({subject}, {predicate}, {value})")
 
+    # -- story spine (M3: set once, then clamped deltas only — replay-safe) ------------
+
+    def _apply_spine_set(self, p: dict[str, Any], turn: int) -> None:
+        if self.spine is not None:
+            raise ValueError("the spine is already set (spine_set is once per campaign)")
+        raw = p.get("spine")
+        if not isinstance(raw, dict):
+            raise ValueError("spine_set requires a spine object")
+        self.spine = StorySpine.from_dict(raw)
+
+    def _apply_spine_delta(self, p: dict[str, Any], turn: int) -> None:
+        if self.spine is None:
+            raise ValueError("no spine to update (spine_set first)")
+        op = _req_str(p, "op")
+        if not op:
+            raise ValueError("spine_delta requires an op")
+        self.spine.apply_delta(op, p)
+
     # -- combat (authoritative results — committed numbers, never re-rolled) ----------
 
     def _apply_combat_begin(self, p: dict[str, Any], turn: int) -> None:
@@ -749,6 +770,7 @@ class WorldState:
                 "round": self.combat.round,
                 "outcome": self.combat.outcome,
             },
+            "spine": None if self.spine is None else self.spine.to_dict(),
         }
 
     def fingerprint(self) -> str:

@@ -8,7 +8,6 @@ guard.
 from __future__ import annotations
 
 import importlib
-import json
 from pathlib import Path
 
 import pytest
@@ -53,11 +52,18 @@ def test_static_page_ships_in_repo():
     assert "text/event-stream" not in text  # the client parses frames, never a MIME string
 
 
-def test_adventure_stub_is_valid_json_with_expected_keys():
+def test_adventure_is_valid_and_loads():
+    """M3: the pre-authored adventure loads + validates through the spine module."""
+    from rpg.dm.spine import adventure_init_payload, load_adventure
+
     path = REPO_ROOT / "src" / "rpg" / "content" / "shadow_crown.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
-    assert data["status"] == "placeholder"
-    assert set(data) >= {"title", "spine", "locations", "npcs", "encounters"}
+    adventure = load_adventure(path)
+    assert adventure.title == "The Shadow Crown"
+    assert len(adventure.spine.beats) >= 4
+    assert adventure.spine.active_beat is not None  # beat 1 is active at the seed
+    payload = adventure_init_payload(adventure)
+    assert payload["pc"]["name"] == "Kellan Voss"
+    assert len(payload["locations"]) == len(adventure.locations)
 
 
 @pytest.mark.skipif(IN_IMAGE, reason="repo docs ship at the host checkout, not in the image")

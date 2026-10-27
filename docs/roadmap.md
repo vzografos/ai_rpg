@@ -173,3 +173,90 @@ restart on the same file (`load_world`, snapshot-verified); plus
 live: on the dev container, `rpg.cli new` + two committed turns,
 `docker compose stop app` (mid-session kill), `start`, and
 `world-status` output byte-identical before/after.
+
+### M3 — story spine + DM loop: spine in the log, server-ticked beats, turn-level SSE (2026-10-27)
+
+**Decision:** M3 lands the play surface as three `dm/` modules plus
+content. `dm/spine.py` — the `StorySpine` model (beats with waypoints of
+kind place/item/npc/objective/fight/narrative, cast with keeper-only
+agendas, planned events, finale), loaded from the pre-authored adventure
+`content/shadow_crown.json`; all spine mutation goes through clamped
+`spine_set`/`spine_delta` **events** (`apply_delta` rejects unknown ops,
+rewrites of completed beats, non-final statuses, out-of-range counts) —
+the spine is a log-resident state like any other, with a single-row
+`spine` entity table as its materialized view (the M2 "log is the
+authority, tables are a view" property extends to it unchanged).
+`dm/tools.py` — the DM tool schemas and `ToolEngine`: every tool
+validates its arguments, dispatches to `WorldState.apply_event`, and
+returns a `ToolResult` carrying the events, dice frames and
+**authoritative lines** (the engine's own wording of every number) that
+the narration must reflect verbatim; `start_combat`/`end_combat` bridge
+the M1 `Combat` object — the whole encounter is resolved by the engine
+and committed attack-by-attack (`combat_begin/attack/turn`), and
+`end_combat` *derives* the claimed outcome from the committed state and
+rejects mismatches (defeat wakes the PC at 1 HP). `dm/loop.py` — the the turn pipeline
+pipeline per turn: arbitrate (meta short-circuit) → intent (one advisory
+`extract_json` call, never fatal) → context (M2 builder + spine `[NOW]`
+block in the stable head) → bounded DM tool loop (8 rounds) → single
+`WorldDB.commit` → spine tick/advance → SSE frames rendered from committed
+state.
+
+**Semantics pinned beyond the M3 bullet list:**
+
+1. **The model can narrate the story but not advance it.** Beats advance
+   only by server-side ticks: `spine.progress_events(world)` emits a
+   `tick_waypoint` delta for every *active* beat waypoint the committed
+   world justifies (place → PC location, item → PC holds it, npc/
+   objective/fight/narrative → a recorded fact with that value — facts
+   enter only through the `note` tool, i.e. real play), and
+   `advance_events()` closes a beat only once all its waypoints are
+   ticked. The LLM's only story-side tools are `note`/`quest_update`
+   (evidence) and `ask_clarification` (ends the turn with the question as
+   narration).
+2. **Thirteenth tool: `award` (xp/gold)** — not in the M3 bullet list;
+   the live DM needed a legal way to pay out, and it clamps to
+   non-negative ints through the existing `pc_*` events. Rejection is the
+   contract: every bad tool call returns a `REJECTED` message and commits
+   nothing (C3).
+3. **SSE is turn-level, not token-level.** Frame grammar: `narration`,
+   `dice`, `state` (post-commit `world.to_dict()`), `quest` (player-safe
+   quest lines + completed beats), `beat` (a new beat started this turn),
+   `error`, `done` (committed turn + usage + tool names). Rationale:
+   M3's acceptance is playable turns, and the frame grammar is the
+   transport contract the browser, CLI and test harness all parse — token
+   streaming is a web-layer optimization that can layer on top later
+   without changing it. The `quest`/`beat` projections keep keeper-only
+   data (agendas, planned-event details) out of the player-facing
+   surface, pinned by test.
+4. **Minimal arbiter.** Meta commands `/help /status /roll /world /ooc`
+   are engine-only (zero LLM, a committed message pair, dice via the same
+   seeded source); everything else is in-game intent, wrapped as
+   untrusted data (`player_action_wrap` — C4) before any model sees it.
+   The intent call's output is advisory only (appended to the user tail as
+   "Advisory from the adjudication clerk"); it can never commit.
+5. **A turn is never lost.** Provider failure mid-loop or tool-budget
+   exhaustion (8 rounds without narration) falls back to a deterministic
+   narration built from the authoritative lines (or a fixed line when
+   nothing committed); the turn still commits with an `error` frame. The
+   dice of every roll are carried as frames regardless, so the narration
+   stays honest about numbers.
+6. **CLI play surface:** `rpg.cli start` seeds the adventure (world_init
+   + spine_set at turn 0, no LLM) and `rpg.cli play TEXT [--seed]` runs
+   one headless pipeline turn — the live smoke path that exercises the
+   real provider in-container. `--seed` gives reproducible dice
+   (`RPG_SEED` for the web app) so an acceptance run is replayable.
+
+**Acceptance verified (2026-10-27):** `make check` green (ruff + 272
+tests, 2 skipped) — including the scripted **10-turn fake-LLM session
+through the real web pipeline** (`tests/web/test_session.py`: beats 1–2
+complete on committed evidence with `beat` frames on turns 3 and 7,
+per-turn snapshots, and a restart on the same db file replaying to the
+byte-identical world, dice pinned by seed) plus dm unit suites for the
+spine deltas, tool dispatch (incl. the deterministic seed-42 undercroft
+ambush and `end_combat` outcome derivation) and pipeline fallbacks. Live
+smoke against the configured local model (qwen38 on vLLM): `start` + two
+`play` turns — the DM narrated on-beat (Brenna → the blackened fields →
+Old Maren), used `move_to`/`note`/`npc_note` as the only mutations, and
+beat 1 closed itself with a `beat` frame; no crash path seen. The full
+10–20 turn browser sitting remains the human's to play (the surface is
+ready: `make up`, new session, transcript restore, sidebar state).

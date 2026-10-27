@@ -1,16 +1,310 @@
 {
   "title": "The Shadow Crown",
-  "status": "placeholder",
   "milestone": "M3",
-  "note": "Pre-authored adventure: spine + 3-5 locations + 6-10 NPCs with agendas + 3 encounters + a finale. Schema lands in M3; this stub keeps the content path importable and the layout honest from M0.",
-  "spine": {
-    "premise": "",
-    "stakes": "",
-    "antagonist": "",
-    "beats": [],
-    "finale": ""
+  "pc_location": "The village square",
+  "pc": {
+    "name": "Kellan Voss",
+    "hp": 14,
+    "max_hp": 14,
+    "ac": 13,
+    "abilities": {
+      "strength": 14,
+      "dexterity": 12,
+      "constitution": 10,
+      "intelligence": 10,
+      "wisdom": 12,
+      "charisma": 10
+    },
+    "inventory": {
+      "Shortsword": 1,
+      "Dagger": 1,
+      "Torch": 2
+    },
+    "gold": 12,
+    "xp": 0,
+    "description": "A village scout: a keen eye, a short temper, and a debt to the tavern he works off."
   },
-  "locations": [],
-  "npcs": [],
-  "encounters": []
+  "spine": {
+    "premise": "Three nights before the harvest moon, the fields of Hollowmere fail: the grain blackens at the root. The village believes a shadow has settled over the land.",
+    "stakes": "If the shadow is crowned at the harvest moon's peak, the blight becomes permanent and the village starves. If the player fails, the crown goes back onto the brow of the dead king.",
+    "antagonist": "Vesper the Hollow — the false prophet who wore the shadow crown's name before the last king, and came back for it.",
+    "beats": [
+      {
+        "text": "Learn what the shadow has done to the harvest",
+        "act": 1,
+        "waypoints": [
+          { "kind": "npc", "text": "Brenna" },
+          { "kind": "npc", "text": "Old Maren" }
+        ]
+      },
+      {
+        "text": "Find the candle that can unmake the crown",
+        "act": 1,
+        "waypoints": [
+          { "kind": "npc", "text": "Mayor Aldous" },
+          { "kind": "item", "text": "Candle of Vell" }
+        ]
+      },
+      {
+        "text": "Pass the undercroft into the King's Crypt",
+        "act": 2,
+        "waypoints": [
+          { "kind": "place", "text": "The undercroft" },
+          { "kind": "npc", "text": "Sable" },
+          { "kind": "fight", "text": "The Grave Wight" }
+        ]
+      },
+      {
+        "text": "Take the shadow crown from the dead king",
+        "act": 2,
+        "waypoints": [
+          { "kind": "item", "text": "The Shadow Crown" },
+          { "kind": "fight", "text": "Vesper the Hollow" }
+        ]
+      },
+      {
+        "text": "Unmake the crown and bring the light back",
+        "act": 3,
+        "waypoints": [
+          { "kind": "objective", "text": "The shadow crown is unmade" },
+          { "kind": "place", "text": "The village square" },
+          { "kind": "narrative", "text": "The harvest is saved" }
+        ]
+      }
+    ],
+    "cast": [
+      {
+        "name": "Brenna",
+        "role": "tavern keeper",
+        "agenda": "Keeper of the candle. Knows why the crown must not be recrowned, and will not say why. If the player threatens the village, she bars the tavern door."
+      },
+      {
+        "name": "Tallow",
+        "role": "Brenna's apprentice",
+        "agenda": "Hears everything; sells secrets for bread. Knows that Aldous keeps a spare key to the undercroft."
+      },
+      {
+        "name": "Mayor Aldous",
+        "role": "mayor of Hollowmere",
+        "agenda": "Sold the crown's seal to a stranger three nights ago. Hides it. If pressed, he bolts for the undercroft with the key."
+      },
+      {
+        "name": "Old Maren",
+        "role": "herb-woman by the chapel steps",
+        "agenda": "Knows the legend: the crown was forged for the king who died mid-crowning, and Vell's candle is the only thing that can unmake it. She tells it to whoever first gives her a piece of bread."
+      },
+      {
+        "name": "Father Cael",
+        "role": "chapel priest",
+        "agenda": "Blesses the undercroft door and will not let anyone pass unblessed. He does not know the blessing is the candle's light — only that the dark keeps off."
+      },
+      {
+        "name": "Sable",
+        "role": "grave-digger",
+        "agenda": "Opened the crypt door for the stranger three nights ago. Eaten with guilt. Will confess for a promise of forgiveness."
+      },
+      {
+        "name": "Vesper",
+        "role": "the false prophet",
+        "agenda": "The hollow thing wearing a prophet's name, come to reclaim the crown. Wants it back on the dead king's brow at the harvest moon's peak. Speaks softly, and never lies — which is worse."
+      },
+      {
+        "name": "The Grave Wight",
+        "role": "guardian of the crypt",
+        "agenda": "Attacks anyone who touches the crown. It does not bargain."
+      }
+    ],
+    "events": [
+      {
+        "kind": "reveal",
+        "name": "The legend of the last king",
+        "trigger": "Old Maren is given bread, or the harvest's blight is asked about",
+        "detail": "The crown was forged for King Aldric the Last, who died mid-crowning. The shadow did not die with him. Vell's candle is the only light that can unmake it."
+      },
+      {
+        "kind": "ambush",
+        "name": "Marrow and Ash on the stairs",
+        "trigger": "the player enters the undercroft without the candle's light",
+        "detail": "Two cultists hired by the stranger hold the stairs. They fight to keep the stranger's secret, not out of conviction — the candle turns them away."
+      },
+      {
+        "kind": "climax",
+        "name": "The crowning at the moon's peak",
+        "trigger": "the player takes the crown from the altar",
+        "detail": "Vesper reaches for the crown at the altar; the acolyte holds the approach. Beating her ends the adventure."
+      }
+    ],
+    "finale": "The harvest moon rises clear. Lanterns burn in the village square, and the candle of Vell gutters out its last wick — the shadow is gone, and the fields stand straight in the dark."
+  },
+  "locations": [
+    {
+      "name": "The village square",
+      "description": "A cobbled square, a chapel on a rise, and the blackening fields beyond the walls.",
+      "exits": ["The tavern", "The mayor's hall"]
+    },
+    {
+      "name": "The tavern",
+      "description": "The Hearth, where woodsmoke and low voices compete. Brenna keeps the counter; Tallow waits tables.",
+      "exits": ["The village square"]
+    },
+    {
+      "name": "The mayor's hall",
+      "description": "Plain stone, little light. Aldous's seal hangs crooked over the door, and the room smells of cold ink.",
+      "exits": ["The village square"]
+    },
+    {
+      "name": "The undercroft",
+      "description": "Stone steps down from the chapel's crypt door, into cold that smells of wet rock and old incense.",
+      "exits": ["The village square", "The King's Crypt"]
+    },
+    {
+      "name": "The King's Crypt",
+      "description": "The tomb of Aldric the Last. On a black basalt altar, a shadow moves where a crown should be.",
+      "exits": ["The undercroft"]
+    }
+  ],
+  "npcs": [
+    {
+      "name": "Brenna",
+      "location": "The tavern",
+      "description": "The tavern keeper. Dry voice, wet rag, and eyes that have watched this square for thirty years.",
+      "agenda": "Keeper of the candle. Knows why the crown must not be recrowned, and will not say why."
+    },
+    {
+      "name": "Tallow",
+      "location": "The tavern",
+      "description": "Brenna's apprentice. Small, quick, and always hungry.",
+      "agenda": "Hears everything; sells secrets for bread. Knows that Aldous keeps a spare key to the undercroft."
+    },
+    {
+      "name": "Mayor Aldous",
+      "location": "The mayor's hall",
+      "description": "A thin man in a good coat that fits him too well.",
+      "agenda": "Sold the crown's seal to a stranger three nights ago. Hides it. If pressed, he bolts for the undercroft with the key."
+    },
+    {
+      "name": "Old Maren",
+      "location": "The village square",
+      "description": "The herb-woman by the chapel steps. Her basket is always a step out of reach.",
+      "agenda": "Knows the legend: the crown was forged for the king who died mid-crowning, and Vell's candle is the only thing that can unmake it."
+    },
+    {
+      "name": "Father Cael",
+      "location": "The village square",
+      "description": "The chapel priest. Kind face, hands that will not stop shaking.",
+      "agenda": "Blesses the undercroft door and will not let anyone pass unblessed. He does not know the blessing is the candle's light — only that the dark keeps off."
+    },
+    {
+      "name": "Sable",
+      "location": "The undercroft",
+      "description": "The grave-digger. Heavy hands, and eyes that will not meet yours.",
+      "agenda": "Opened the crypt door for the stranger three nights ago. Eaten with guilt. Will confess for a promise of forgiveness."
+    },
+    {
+      "name": "Vesper",
+      "location": "The King's Crypt",
+      "description": "A tall figure in a prophet's grey. A face like a candle seen through smoke.",
+      "agenda": "The hollow thing wearing a prophet's name, come to reclaim the crown. Wants it back on the dead king's brow at the harvest moon's peak. Speaks softly, and never lies — which is worse."
+    },
+    {
+      "name": "The Grave Wight",
+      "location": "The King's Crypt",
+      "description": "The guardian of the crypt. A shape of cold that was a man once.",
+      "agenda": "Attacks anyone who touches the crown. It does not bargain."
+    }
+  ],
+  "items": [
+    {
+      "name": "Candle of Vell",
+      "location": "The mayor's hall",
+      "quantity": 1,
+      "description": "A white candle that has never burned. It is warm to the touch."
+    },
+    {
+      "name": "The Shadow Crown",
+      "location": "The King's Crypt",
+      "quantity": 1,
+      "description": "A circlet of black iron. The shadow under it moves like something breathing."
+    },
+    {
+      "name": "Maren's herb pouch",
+      "holder": "npc:Old Maren",
+      "quantity": 1,
+      "description": "Dried roots and a small knife. She trades it for stories."
+    },
+    {
+      "name": "A vial of grave salt",
+      "location": "The undercroft",
+      "quantity": 1,
+      "description": "Grey salt that hisses near the dark. It slows a wight's step for a round."
+    }
+  ],
+  "encounters": [
+    {
+      "name": "The undercroft ambush",
+      "location": "The undercroft",
+      "notes": "Marrow and Ash were hired by the stranger to keep the stairs dark. They fight to keep the secret, not out of conviction — the candle of Vell turns them away. Use start_combat with these two stat blocks.",
+      "participants": [
+        {
+          "name": "Marrow",
+          "ac": 11,
+          "hp": 14,
+          "max_hp": 14,
+          "dexterity": 12,
+          "attack_bonus": 3,
+          "damage": "1d6+1"
+        },
+        {
+          "name": "Ash",
+          "ac": 11,
+          "hp": 14,
+          "max_hp": 14,
+          "dexterity": 12,
+          "attack_bonus": 3,
+          "damage": "1d6+1"
+        }
+      ]
+    },
+    {
+      "name": "The wight in the King's Crypt",
+      "location": "The King's Crypt",
+      "notes": "The wight guards the altar and will not yield the crown. A vial of grave salt slows its step for a round (narrate it hesitating). Use start_combat with this stat block.",
+      "participants": [
+        {
+          "name": "The Grave Wight",
+          "ac": 12,
+          "hp": 22,
+          "max_hp": 22,
+          "dexterity": 10,
+          "attack_bonus": 4,
+          "damage": "1d8+2"
+        }
+      ]
+    },
+    {
+      "name": "The crowning",
+      "location": "The King's Crypt",
+      "notes": "Vesper reaches for the crown at the harvest moon's peak; the acolyte holds her between the player and the altar. Beating her ends the adventure. Use start_combat with these two stat blocks.",
+      "participants": [
+        {
+          "name": "Vesper the Hollow",
+          "ac": 14,
+          "hp": 34,
+          "max_hp": 34,
+          "dexterity": 14,
+          "attack_bonus": 5,
+          "damage": "1d10+3"
+        },
+        {
+          "name": "The Hollow Acolyte",
+          "ac": 12,
+          "hp": 18,
+          "max_hp": 18,
+          "dexterity": 12,
+          "attack_bonus": 4,
+          "damage": "1d8"
+        }
+      ]
+    }
+  ]
 }

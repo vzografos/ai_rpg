@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from rpg.dm.spine import StorySpine
 from rpg.engine.sheet import CharacterSheet
 from rpg.engine.state import (
     Fact,
@@ -85,6 +86,9 @@ EVENT_KINDS = frozenset(
         "combat_condition",
         "combat_heal",
         "combat_end",
+        # story spine (M3: set once at session start, then clamped deltas only)
+        "spine_set",
+        "spine_delta",
     }
 )
 
@@ -134,6 +138,10 @@ CREATE TABLE IF NOT EXISTS location (
   name TEXT NOT NULL UNIQUE,
   description TEXT NOT NULL DEFAULT '',
   exits TEXT NOT NULL DEFAULT '[]'
+);
+CREATE TABLE IF NOT EXISTS spine (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  spine TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS fact (
   id INTEGER PRIMARY KEY,
@@ -366,6 +374,9 @@ class WorldDB:
             world.locations[name] = Location(
                 name=name, description=description, exits=json.loads(exits)
             )
+        row = self._conn.execute("SELECT spine FROM spine WHERE id = 1").fetchone()
+        if row is not None:
+            world.spine = StorySpine.from_dict(json.loads(row[0]))
         for subject, predicate, value, turn, source in self._conn.execute(
             "SELECT subject, predicate, value, turn, source FROM fact ORDER BY id"
         ):
@@ -474,4 +485,10 @@ class WorldDB:
             self._conn.execute(
                 "INSERT INTO fact (subject, predicate, value, turn, source) VALUES (?, ?, ?, ?, ?)",
                 (fact.subject, fact.predicate, fact.value, fact.turn, fact.source),
+            )
+        self._conn.execute("DELETE FROM spine")
+        if world.spine is not None:
+            self._conn.execute(
+                "INSERT INTO spine (id, spine) VALUES (1, ?)",
+                (json.dumps(world.spine.to_dict(), sort_keys=True),),
             )
