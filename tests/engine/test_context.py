@@ -201,6 +201,35 @@ def test_state_block_never_leaks_keeper_only_data():
         assert "keeper-only" not in text
 
 
+def test_npc_knows_lines_scope_what_each_npc_may_voice():
+    # M4 knowledge scoping: an NPC's record = its description + the facts
+    # that name it. A confession Sable made is in Sable's record, not
+    # Brenna's — so Brenna cannot voice it; no record carries an agenda.
+    world = make_world()
+    world.apply_event(
+        "npc_add",
+        {"name": "Sable", "location": "The village square",
+         "description": "The grave-digger.", "agenda": "Eaten with guilt over the crypt door."},
+        turn=3,
+    )
+    world.apply_event(
+        "fact_add",
+        {"subject": "Sable", "predicate": "confessed",
+         "value": "he opened the crypt door for a stranger", "source": "a promise of forgiveness"},
+        turn=3,
+    )
+    block = state_block(world)
+    breanna = [line for line in block.splitlines() if line.startswith("NPC knows (Brenna):")][0]
+    sable = [line for line in block.splitlines() if line.startswith("NPC knows (Sable):")][0]
+    assert "The tavern keeper" in breanna  # the description is in her record
+    assert "Brenna fears the crown" in breanna  # a fact that names her
+    assert "crypt door" not in breanna  # Sable's confession is not in her record
+    assert "Sable confessed" in sable
+    for line in (breanna, sable):
+        assert "shadow crown and will not say" not in line  # agendas stay behind the curtain
+        assert "Eaten with guilt" not in line
+
+
 def test_empty_world_stays_readable():
     block = state_block(WorldState())
     assert block == prompts.STATE_HEADER

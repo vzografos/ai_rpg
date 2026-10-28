@@ -390,9 +390,13 @@ class ToolEngine:
         if handler is None:
             return ToolResult(name=name, ok=False, message=f"REJECTED: unknown tool {name!r}.")
         try:
-            return handler(args)
+            result = handler(args)
         except ValueError as exc:
             return ToolResult(name=name, ok=False, message=f"REJECTED: {exc}")
+        # The turn's authoritative record (the M4 backstop + fallback render
+        # from it): every accepted call's engine wording, in order.
+        self.authoritative.extend(result.authoritative)
+        return result
 
     def _apply(self, kind: str, payload: dict[str, Any]) -> None:
         self.world.apply_event(kind, payload, self.world.turn)
@@ -911,7 +915,8 @@ class ToolEngine:
                 "death_failures": defender.death_failures,
             },
         )
-        self.authoritative.append(self._attack_line(result))
+        # The turn's authoritative lines ride on the start_combat result
+        # (dispatch collects them); no append here or they would double.
 
     def _commit_turn(self, combat: Combat, actor: str) -> None:
         combat.end_turn()

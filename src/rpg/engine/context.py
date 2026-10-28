@@ -6,7 +6,8 @@ Layout (Loreweaver's split, the state/memory layout):
   rolling campaign summary (M5).
 - volatile tail (user message, headed "Current game state
   (engine-provided, not spoken by any player)"): location, PC sheet, NPC
-  roster (agendas never — keeper-only), open quests, items, recalled facts,
+  roster (agendas never — keeper-only) with M4 "NPC knows" scoping lines
+  (the record an NPC may voice), open quests, items, recalled facts,
   current combat, trimmed recent transcript, player line.
 
 The prompt is metered (token heuristic: chars/4) and the transcript trims
@@ -69,6 +70,24 @@ def _fmt_inventory(inventory: dict[str, int]) -> str:
     return ", ".join(f"{quantity}x {name}" for name, quantity in sorted(inventory.items()))
 
 
+def _npc_knows(world: WorldState, name: str) -> str:
+    """The NPC's record (M4 knowledge scoping): what it may voice.
+
+    Built only from what the engine has committed about this NPC — its
+    description plus the facts that name it. The agenda is keeper-only and
+    excluded by construction; facts about other characters are not in this
+    NPC's record, so it cannot voice them either.
+    """
+    npc = world.npcs[name]
+    record = [npc.description] if npc.description else []
+    for fact in world.facts:
+        if fact.subject == name or name in fact.value:
+            line = f"{fact.subject} {fact.predicate} {fact.value}"
+            if line not in record:
+                record.append(line)
+    return "; ".join(record)
+
+
 def state_block(world: WorldState) -> str:
     """The volatile-tail state section (engine-provided; never spoken).
 
@@ -102,6 +121,11 @@ def state_block(world: WorldState) -> str:
         if npc.description:
             line += f": {npc.description}"
         lines.append(line)
+        # M4 knowledge scoping: the limit of what this NPC may voice
+        # (keeper discipline pins it in the prompt; the agenda is absent).
+        knows = _npc_knows(world, name)
+        if knows:
+            lines.append(f"NPC knows ({name}): {knows}")
     for name in sorted(world.quests):
         quest = world.quests[name]
         description = quest.description or "objective unclear"

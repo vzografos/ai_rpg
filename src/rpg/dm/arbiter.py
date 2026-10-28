@@ -3,8 +3,10 @@ player's text actually?
 
 - meta commands (/help /status /roll /world /ooc) -> the engine, no LLM
 - in-game text -> intent, never outcome; wrapped as untrusted data
-  (`<player_action>`) so embedded instructions are never followed
-- identity enforcement (second person only) lands with the M4 backstops
+  (`<player_action>`) so embedded instructions — including fake system/DM
+  instructions — are never followed (M4 anti-jailbreak form)
+- identity enforcement (second person only) runs in the M4 backstops on the
+  narration (engine/backstops.py: check_identity)
 
 The meta surface is deliberately small in M3: the debug CLI already covers
 the heavy verbs; the web UI gets the cheap ones the player actually types.

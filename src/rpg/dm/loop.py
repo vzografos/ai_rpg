@@ -7,11 +7,16 @@
                   with the spine [NOW] block in the stable head)
   4. DM round     tool-calling loop: the DM narrates with words but resolves
                   with tools; results come back authoritative
-  5. adjudicate   the engine already did (every mutation is a validated,
-                  clamped, event-logged apply_event)
-  6. backstop     hook for the M4 structural re-ask — no-op in M3
-  7. commit       the event log + tables exactly once (the turn is the unit
-                  of persistence; a crash mid-turn replays the turn)
+   5. adjudicate   the engine already did (every mutation is a validated,
+                   clamped, event-logged apply_event)
+   6. backstop     the structural wall (M4): forgery/contradiction/identity/
+                   combat-transition/secret-leak checks on the narration; a
+                   violation triggers one Stop-form re-ask (no tools, "the turn
+                   does not end; here is the reason"), re-verified after each
+                   re-ask, bounded (3); then a deterministic fallback rendered
+                   from the committed events
+   7. commit       the event log + tables exactly once (the turn is the unit
+                   of persistence; a crash mid-turn replays the turn)
   8. spine        tick the active beat's waypoints, advance on completion
   9. render       the narration from committed state as SSE frames
 
@@ -28,6 +33,11 @@ from dataclasses import dataclass, field
 
 from rpg.dm import arbiter
 from rpg.dm.tools import DM_TOOLS, ToolEngine
+from rpg.engine.backstops import (
+    MAX_BACKSTOP_REASKS,
+    fallback_narration,
+    run_backstops,
+)
 from rpg.engine.context import build_context
 from rpg.engine.dice import SeededSource, SystemSource
 from rpg.engine.events import Message, WorldDB, WorldEvent
@@ -66,12 +76,17 @@ class TurnPipeline:
         db: WorldDB,
         world: WorldState,
         dice_source: SeededSource | SystemSource | None = None,
+        *,
+        backstops_enabled: bool = True,
     ) -> None:
         self.provider = provider
         self.db = db
         self.world = world
         self.dice = dice_source or SystemSource()
         self.engine = ToolEngine(world, self.dice)
+        # M4: the structural wall. The red-line suite runs the same pipeline
+        # with this off to prove each backstop earns its keep.
+        self.backstops_enabled = backstops_enabled
 
     # ------------------------------------------------------------------ turn
 
@@ -117,8 +132,7 @@ class TurnPipeline:
         ]
         if intent is not None:
             llm_messages[1]["content"] += f"\n\nAdvisory from the adjudication clerk: {intent}"
-        # 4-6. the DM tool loop (adjudication happened as tools applied;
-        # the backstop hook is the M4 no-op).
+        # 4-5. the DM tool loop (adjudication happened as tools applied).
         try:
             narration, exhausted = await self._tool_loop(llm_messages, result)
         except ProviderError as exc:
@@ -126,10 +140,9 @@ class TurnPipeline:
             narration, exhausted = None, True
         if exhausted:
             self._error(result, "the DM ran out of tool rounds before narrating (budget)")
-        if not narration or not narration.strip():
-            result.narration = self._fallback_narration()
-        else:
-            result.narration = narration.strip()
+        # 6. the backstops: structural checks, bounded Stop-form re-asks,
+        # then the deterministic fallback (the turn is never lost).
+        result.narration = await self._backstop((narration or "").strip(), llm_messages, result)
         # 7. the turn's events: the tool events the engine applied, plus the
         # spine's own deltas (waypoint ticks, beat advance) below.
         events = [
@@ -237,12 +250,68 @@ class TurnPipeline:
             hints.append("hostile creatures are engaging the player — start a combat")
         return "; ".join(hints) or None
 
-    def _fallback_narration(self) -> str:
-        """The turn is never lost: a deterministic line from committed events."""
-        lines = self.engine.authoritative
-        if not lines:
-            return "The moment hangs, undecided. What do you do?"
-        return f"{lines[-1]} What do you do?"
+    async def _backstop(self, narration: str, llm_messages: list[dict], result: TurnResult) -> str:
+        """Step 6: the structural wall (roadmap M4).
+
+        Check the narration against the committed state; on a violation, one
+        Stop-form re-ask (tools disabled: "the turn does not end; here is the
+        reason"), re-verified after each re-ask, bounded (MAX_BACKSTOP_REASKS);
+        then the deterministic fallback rendered from the committed events.
+        """
+        if not self.backstops_enabled:
+            return narration
+        violations = run_backstops(
+            narration,
+            self.world,
+            dice=result.dice,
+            events=self.engine.events,
+            authoritative=self.engine.authoritative,
+        )
+        if not violations:
+            return narration
+        # The wall fired: the client sees which backstops caught it (SSE
+        # error frame) whether the rewrite succeeds or the fallback carries.
+        caught = ", ".join(sorted({violation.kind for violation in violations}))
+        reasks = 0
+        while violations:
+            if reasks >= MAX_BACKSTOP_REASKS:
+                self._error(
+                    result,
+                    f"backstop: {caught} — deterministic fallback "
+                    f"after {MAX_BACKSTOP_REASKS} re-asks",
+                )
+                return fallback_narration(self.engine.authoritative)
+            reasks += 1
+            stop_messages = llm_messages + [
+                {"role": "assistant", "content": narration},
+                {"role": "user", "content": prompts.stop_reask([v.detail for v in violations])},
+            ]
+            try:
+                response = await self.provider.chat(stop_messages)
+            except ProviderError as exc:
+                self._error(result, f"backstop re-ask: {exc}")
+                return fallback_narration(self.engine.authoritative)
+            self._add_usage(result.usage, response.usage)
+            if response.tool_calls:
+                self._error(
+                    result, "backstop re-ask returned tool calls (the stop form is text-only)"
+                )
+                continue
+            rewritten = (response.content or "").strip()
+            if not rewritten:
+                self._error(result, f"backstop: {caught} — the re-ask came back empty")
+                return fallback_narration(self.engine.authoritative)
+            narration = rewritten
+            violations = run_backstops(
+                narration,
+                self.world,
+                dice=result.dice,
+                events=self.engine.events,
+                authoritative=self.engine.authoritative,
+            )
+        reask_word = "re-ask" if reasks == 1 else "re-asks"
+        self._error(result, f"backstop: {caught} — rewritten after {reasks} {reask_word}")
+        return narration
 
     def _error(self, result: TurnResult, message: str) -> None:
         if message not in result.errors:

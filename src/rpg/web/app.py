@@ -2,7 +2,7 @@
 
 M3 surface:
     GET  /                   the single static page (chat pane + sidebar, vanilla JS)
-    GET  /api/status         app + model info (milestone M3)
+    GET  /api/status         app + model info (milestone M4)
     GET  /api/ping           one-shot LLM round-trip ("LLM says hello")
     POST /api/new            start a session: seed the pre-authored adventure
     POST /action             player input -> the turn pipeline -> SSE frames
@@ -134,7 +134,7 @@ async def status(request: Request) -> dict[str, Any]:
     return {
         "app": "ai_rpg",
         "version": __version__,
-        "milestone": "M3",
+        "milestone": "M4",
         "model": provider.config.model,
         "base_url": provider.config.base_url,
         "world": bool(world is not None and not world.is_empty),
