@@ -7,15 +7,18 @@
 
 Tables (the state/memory layout): pc, npc, item, quest, location, fact, event
 (append-only), snapshot, message (user line + final narration only — never
-tool chatter). The entity tables are a materialized view: on load the world
-is rebuilt from the event log and verified against the last snapshot, then
-the tables are resynced from the authoritative replay.
+tool chatter). M5 adds the rolling-summary table (single row, like `spine`)
+and the `fact_fts` FTS5 index over facts (recall, the state/memory layout). The entity
+tables are a materialized view: on load the world is rebuilt from the event
+log and verified against the last snapshot, then the tables are resynced from
+the authoritative replay.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,6 +92,8 @@ EVENT_KINDS = frozenset(
         # story spine (M3: set once at session start, then clamped deltas only)
         "spine_set",
         "spine_delta",
+        # rolling campaign summary (M5: folded by the memory step, replayed verbatim)
+        "summary_set",
     }
 )
 
@@ -150,6 +155,14 @@ CREATE TABLE IF NOT EXISTS fact (
   value TEXT NOT NULL,
   turn INTEGER NOT NULL,
   source TEXT NOT NULL DEFAULT ''
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS fact_fts USING fts5(
+  subject, predicate, value, turn UNINDEXED
+);
+CREATE TABLE IF NOT EXISTS summary (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  summary TEXT NOT NULL,
+  watermark INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS event (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -233,6 +246,28 @@ def rebuild_world(events: list[WorldEvent]) -> WorldState:
     return world
 
 
+_FTS_STOPWORDS = frozenset(
+    "a an and are as at be but by do for from had has have if in is it its "
+    "i me my no not of on or so that the their them they this to was we were "
+    "what when where which who will with you your about into just".split()
+)
+
+
+def _fts_terms(query: str) -> list[str]:
+    """Reduce a free-text query to FTS5 terms (lowercased, deduped, stopword-free).
+
+    Words under three letters and English function words are dropped; the rest
+    are what `recall_facts` matches against the fact index.
+    """
+    terms: list[str] = []
+    for word in re.findall(r"[a-z0-9]+", query.casefold()):
+        if len(word) < 3 or word in _FTS_STOPWORDS:
+            continue
+        if word not in terms:
+            terms.append(word)
+    return terms
+
+
 class WorldDB:
     """SQLite-backed world: the append-only log plus the materialized tables.
 
@@ -293,6 +328,63 @@ class WorldDB:
             for message_id, turn, role, content in rows
         ]
 
+    def recall_facts(self, query: str, limit: int = 5) -> list[Fact]:
+        """FTS5 recall of the facts relevant to a query (milestone M5, state/memory layout).
+
+        No embeddings (a solo MVP): the query is reduced to FTS5 terms and
+        matched against the `fact_fts` index; rows come back ranked (bm25)
+        and are deduped by (subject, predicate, value). An unmatchable query
+        (no terms) recalls nothing.
+        """
+        terms = _fts_terms(query)
+        if not terms:
+            return []
+        match = " OR ".join(f'"{term}"' for term in terms)
+        try:
+            rows = self._conn.execute(
+                "SELECT subject, predicate, value, turn FROM fact_fts "
+                "WHERE fact_fts MATCH ? ORDER BY rank LIMIT ?",
+                (match, limit),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+        facts: list[Fact] = []
+        seen: set[tuple[str, str, str]] = set()
+        for subject, predicate, value, turn in rows:
+            key = (subject.casefold(), predicate.casefold(), value.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            facts.append(Fact(subject=subject, predicate=predicate, value=value, turn=turn))
+        return facts
+
+    def backup_to(self, path: str | Path) -> None:
+        """Copy this database to `path` (SQLite online backup; safe while open).
+
+        A checkpoint the player can later resume with `/load` (roadmap M5):
+        the copy is a full, self-contained world (log + tables + snapshots).
+        """
+        dest = Path(path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest_conn = sqlite3.connect(dest)
+        try:
+            self._conn.backup(dest_conn)
+        finally:
+            dest_conn.close()
+
+    def restore_from(self, path: str | Path) -> None:
+        """Replace this database's contents with `path` (the `/load` swap).
+
+        The SQLite online-backup API in reverse: the save file's pages are
+        copied over the live connection, which then reads the save's log.
+        Call `load_world` afterwards — the in-memory world is stale.
+        """
+        src_conn = sqlite3.connect(Path(path))
+        try:
+            src_conn.backup(self._conn)
+        finally:
+            src_conn.close()
+
     # -- load: rebuild from the log (authoritative), verify, resync tables ----
 
     def load_world(self) -> WorldState | None:
@@ -318,7 +410,12 @@ class WorldDB:
                 world.turn = saved_turn
             if actual != last[1]:
                 raise WorldCorruptionError(
-                    f"world at turn {last[0]} does not match its snapshot: {actual} != {last[1]}"
+                    f"world at turn {last[0]} does not match its snapshot: "
+                    f"{actual} != {last[1]} — either the event log is corrupted, "
+                    "or this database was written by a previous engine version "
+                    "(a stale dev volume: Docker volumes survive `docker system "
+                    "prune` without -v). Do not play on it — delete the "
+                    "database (or the RPG_DATA volume) and start a new session."
                 )
         self._resync_tables(world)
         return world
@@ -377,6 +474,10 @@ class WorldDB:
         row = self._conn.execute("SELECT spine FROM spine WHERE id = 1").fetchone()
         if row is not None:
             world.spine = StorySpine.from_dict(json.loads(row[0]))
+        row = self._conn.execute("SELECT summary, watermark FROM summary WHERE id = 1").fetchone()
+        if row is not None:
+            world.summary = row[0]
+            world.summary_watermark = row[1]
         for subject, predicate, value, turn, source in self._conn.execute(
             "SELECT subject, predicate, value, turn, source FROM fact ORDER BY id"
         ):
@@ -491,4 +592,16 @@ class WorldDB:
             self._conn.execute(
                 "INSERT INTO spine (id, spine) VALUES (1, ?)",
                 (json.dumps(world.spine.to_dict(), sort_keys=True),),
+            )
+        self._conn.execute("DELETE FROM summary")
+        if world.summary:
+            self._conn.execute(
+                "INSERT INTO summary (id, summary, watermark) VALUES (1, ?, ?)",
+                (world.summary, world.summary_watermark),
+            )
+        self._conn.execute("DELETE FROM fact_fts")
+        for fact in world.facts:
+            self._conn.execute(
+                "INSERT INTO fact_fts (subject, predicate, value, turn) VALUES (?, ?, ?, ?)",
+                (fact.subject, fact.predicate, fact.value, fact.turn),
             )

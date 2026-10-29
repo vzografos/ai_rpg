@@ -15,6 +15,9 @@ Usage (inside the container):
     uv run python -m rpg.cli turn "I explore the cave" "You find a dark cave."
     uv run python -m rpg.cli world-status
     uv run python -m rpg.cli dump-context
+    uv run python -m rpg.cli save [name]      # checkpoint the campaign (M5)
+    uv run python -m rpg.cli load <name>      # resume a checkpoint (M5)
+    uv run python -m rpg.cli sessions         # list the named saves (M5)
 """
 
 from __future__ import annotations
@@ -25,9 +28,8 @@ import json
 import sys
 from pathlib import Path
 
-from rpg import __version__
+from rpg import __version__, session
 from rpg.dm.loop import TurnPipeline
-from rpg.dm.spine import adventure_init_payload, load_adventure
 from rpg.engine.context import dump_context
 from rpg.engine.dice import SeededSource, SystemSource, roll_dice
 from rpg.engine.events import Message, WorldDB, WorldEvent, default_db_path
@@ -35,8 +37,6 @@ from rpg.engine.sheet import ABILITIES
 from rpg.engine.state import WorldState
 from rpg.llm import prompts
 from rpg.llm.provider import LLMProvider, ProviderConfig, ProviderError
-
-ADVENTURE_PATH = Path(__file__).parent / "content" / "shadow_crown.json"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,6 +67,16 @@ def main(argv: list[str] | None = None) -> int:
     turn.add_argument("text", help="what the player's character does")
     turn.add_argument("narration", help="the final narration for this turn")
     turn.add_argument("--db", type=Path, default=None, help="db path (default $RPG_DATA/rpg.db)")
+    save = sub.add_parser("save", help="checkpoint the campaign to a named save (no LLM)")
+    save.add_argument("name", nargs="?", default=None, help="save name (default: turn-<N>)")
+    save.add_argument("--db", type=Path, default=None, help="db path (default $RPG_DATA/rpg.db)")
+    load = sub.add_parser("load", help="resume a named save, swapping the live db (no LLM)")
+    load.add_argument("name", help="the save to resume")
+    load.add_argument("--db", type=Path, default=None, help="db path (default $RPG_DATA/rpg.db)")
+    sessions = sub.add_parser("sessions", help="list the named saves + the live session (no LLM)")
+    sessions.add_argument(
+        "--db", type=Path, default=None, help="db path (default $RPG_DATA/rpg.db)"
+    )
     for command in ("world-status", "dump-context"):
         entry = sub.add_parser(command, help=f"print the {command.replace('-', ' ')} (no LLM)")
         entry.add_argument(
@@ -87,7 +97,16 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return 0
 
-    if args.command in ("start", "new", "turn", "world-status", "dump-context"):
+    if args.command in (
+        "start",
+        "new",
+        "turn",
+        "save",
+        "load",
+        "sessions",
+        "world-status",
+        "dump-context",
+    ):
         try:
             return _world_command(args)
         except ValueError as exc:
@@ -105,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps({
                     "app": "ai_rpg",
                     "version": __version__,
-                    "milestone": "M4",
+                    "milestone": "M5",
                     "model": cfg.model,
                     "base_url": cfg.base_url,
                     "api_key_set": bool(cfg.api_key),
@@ -147,31 +166,46 @@ def _world_command(args: argparse.Namespace) -> int:
                 raise ValueError(
                     f"a session already exists at {db_path} ({db.event_count()} events)"
                 )
-            world = WorldState()
-            adventure = load_adventure(ADVENTURE_PATH)
-            payload = adventure_init_payload(adventure, pc_name=args.name)
-            spine_payload = {"spine": adventure.spine.to_dict()}
-            world.apply_event("world_init", payload, 0)
-            world.apply_event("spine_set", spine_payload, 0)
-            db.commit(
-                world,
-                [
-                    WorldEvent(turn=0, kind="world_init", payload=payload),
-                    WorldEvent(turn=0, kind="spine_set", payload=spine_payload),
-                ],
-                [
-                    Message(
-                        turn=0, role="user", content=f"/start {args.name or adventure.pc['name']}"
-                    ),
-                    Message(
-                        turn=0, role="narration", content=f"Session started: {adventure.title}."
-                    ),
-                ],
-            )
+            world, _ = session.seed_adventure(db, pc_name=args.name)
             print(
-                f"session started at {db_path}: {adventure.title} — "
-                f"pc {world.pc.sheet.name!r}, {len(adventure.spine.beats)} beats (turn 1)"
+                f"session started at {db_path}: pc {world.pc.sheet.name!r}, "
+                f"{len(world.spine.beats)} beats (turn 1)"
             )
+            return 0
+        if args.command == "save":
+            world = db.load_world()
+            if world is None or world.is_empty:
+                raise ValueError(f"no session at {db_path} — start one with: rpg.cli start")
+            name = session.save_session(db, world, args.name)
+            print(f"saved: {name} (turn {world.turn}) at {session.save_path(name)}")
+            return 0
+        if args.command == "load":
+            if not session.save_path(args.name).exists():
+                saves = ", ".join(session.list_saves()) or "none"
+                raise ValueError(f"no such save: {args.name} (available: {saves})")
+            world = db.load_world()
+            if world is not None and not world.is_empty:
+                # Record the switch in the campaign being left (M5 parity).
+                turn = world.turn
+                db.commit(
+                    world,
+                    [],
+                    [
+                        Message(turn=turn, role="user", content=f"/load {args.name}"),
+                        Message(
+                            turn=turn, role="narration", content="Switching to the saved campaign."
+                        ),
+                    ],
+                )
+            world = session.load_session(db, args.name)
+            print(f"resumed: {args.name} (turn {world.turn}) at {db_path}")
+            return 0
+        if args.command == "sessions":
+            world = db.load_world()
+            live = "none" if (world is None or world.is_empty) else f"turn {world.turn}"
+            print(f"live session at {db_path}: {live}")
+            for name in session.list_saves():
+                print(f"save: {name}")
             return 0
         if args.command == "new":
             if not db.is_empty():

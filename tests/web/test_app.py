@@ -71,7 +71,7 @@ def test_status_reports_model_and_no_world(monkeypatch: MonkeyPatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["app"] == "ai_rpg"
-    assert body["milestone"] == "M4"
+    assert body["milestone"] == "M5"
     assert body["model"] == "test-model"
     assert body["base_url"] == "fake://test"
     assert body["world"] is False

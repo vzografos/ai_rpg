@@ -190,6 +190,97 @@ def opening_user() -> str:
     )
 
 
+# --- M5: the rolling campaign summary (the state/memory layout) ------------------------------
+# The fold is a utility call (extract_json): the old transcript (since the last
+# fold's watermark) + the previous summary come in, one compact summary comes
+# out. The summary rides the stable head; its watermark tells the context
+# builder which transcript lines it has replaced.
+
+SUMMARY_FOLD_SYSTEM = (
+    "You maintain the rolling campaign summary of a text-only D&D 5e session. "
+    "Fold the history given below (together with the current summary, when "
+    "there is one) into the running summary. Keep what later play depends on: "
+    "who died and why, what was found, taken, promised or revealed, where the "
+    "story stands, open threads and unanswered questions, the player's stated "
+    "goals. Drop small talk, scenery, and anything already settled. Write in "
+    "plain prose, a few tight sentences per thread, and keep it compact. "
+    "Respond with a single JSON object with exactly one key: "
+    '{"summary": "the folded campaign summary"}.'
+)
+
+
+def summary_fold_user(previous: str, history: str, *, overflow: bool = False) -> str:
+    parts = []
+    if previous:
+        parts.append(f"Current summary so far:\n{previous}")
+    parts.append(f"History to fold in (turns since the last fold):\n{history}")
+    if overflow:
+        parts.append(
+            "The previous fold was too long. Retry it far tighter: same "
+            "essential facts, nothing else — the summary must stay compact."
+        )
+    return "\n\n".join(parts)
+
+
+# --- M5: fact extraction (roadmap M5: capped, deduped, resolved-facts removal) --
+# A cheap per-turn utility call: the turn's line + narration + authoritative
+# events come in, durable triples (and removals of facts the turn made false)
+# come out. The engine caps, dedupes and validates them before they commit.
+
+FACT_EXTRACT_SYSTEM = (
+    "You are the keeper's fact clerk for a text-only D&D 5e session. From the "
+    "turn just played, extract the durable facts worth remembering long-term: "
+    "a death and its cause, an object found or taken, a promise or debt, a "
+    "secret revealed, a place or person learned about. Each fact is a triple — "
+    "subject (a name, or 'the player'), predicate (one short relation: died, "
+    "stole, found, is at, knows, promised, owes), value (a short concrete "
+    "phrase). Also list, under 'remove', any of the existing facts the turn "
+    "has made false (e.g. a location fact after someone moved on). Skip "
+    "anything trivial, unsettled, or already recorded. Respond with a single "
+    "JSON object with exactly these keys: "
+    '{"facts": [{"subject": ..., "predicate": ..., "value": ...}], '
+    '"remove": [{"subject": ..., "predicate": ..., "value": ...}]} — '
+    "either list may be empty."
+)
+
+
+def fact_extract_user(
+    user_line: str, narration: str, event_lines: list[str], existing: list[str]
+) -> str:
+    parts = [f"Player line: {user_line}", f"Final narration: {narration}"]
+    if event_lines:
+        parts.append("Committed this turn (authoritative):\n" + "\n".join(event_lines))
+    if existing:
+        parts.append("Facts already on record:\n" + "\n".join(existing))
+    return "\n\n".join(parts)
+
+
+# --- M5: the spine's clamped refresh at beat completion (the story spine) -----------
+# At chapter close the model may annotate beats, skip beats the chapter made
+# moot, or rewrite a not-yet-played beat of the current act — never touch a
+# completed beat. Every proposed delta is clamped by StorySpine.apply_delta
+# (the same ops the event log replays); violations are dropped, not fatal.
+
+SPINE_REFRESH_SYSTEM = (
+    "A beat of the story spine just completed (a chapter close). Propose the "
+    "clamped bookkeeping for the spine as a single JSON object "
+    '{"deltas": [{"op": ...}]} with at most four deltas. Allowed ops: '
+    'append_detail ({op, beat, text}) — an annotation on a beat; '
+    'beat_status ({op, beat, status: "skipped"}) — skip a pending beat this '
+    "chapter made moot; rewrite_beat ({op, beat, text}) — rewrite a "
+    "not-yet-played beat of the current act that this chapter made moot. "
+    "Never mark a beat done, never touch a completed beat. No prose outside "
+    "the JSON."
+)
+
+
+def spine_refresh_user(completed_text: str, now_block: str) -> str:
+    return (
+        f"The beat that just completed: {completed_text}\n\n"
+        f"The spine now:\n{now_block}"
+    )
+
+
 # --- M3: the spine generation call (schema-validated, the story spine) ------------
 # The pre-authored adventure is the default; this is the generated-spine path.
 

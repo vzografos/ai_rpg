@@ -2,14 +2,17 @@
 player's text actually?
 
 - meta commands (/help /status /roll /world /ooc) -> the engine, no LLM
+- session commands (/new /save /load, M5) -> the engine's session module;
+  the arbiter classifies and validates syntax, the pipeline runs the
+  side effect (backup, swap, seed) and writes the final reply
 - in-game text -> intent, never outcome; wrapped as untrusted data
   (`<player_action>`) so embedded instructions — including fake system/DM
   instructions — are never followed (M4 anti-jailbreak form)
 - identity enforcement (second person only) runs in the M4 backstops on the
   narration (engine/backstops.py: check_identity)
 
-The meta surface is deliberately small in M3: the debug CLI already covers
-the heavy verbs; the web UI gets the cheap ones the player actually types.
+The meta surface is deliberately small: the debug CLI already covers the
+heavy verbs; the web UI gets the cheap ones the player actually types.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from dataclasses import dataclass
 from rpg.engine.dice import SeededSource, SystemSource, roll_dice
 from rpg.engine.state import WorldState
 from rpg.llm import prompts
+from rpg.session import SAVE_NAME_RE
 
 __all__ = [
     "META_COMMANDS",
@@ -26,12 +30,19 @@ __all__ = [
     "arbitrate",
 ]
 
-META_COMMANDS = ("/help", "/status", "/roll", "/world", "/ooc")
+META_COMMANDS = ("/help", "/status", "/roll", "/world", "/ooc", "/save", "/load", "/new")
+
+# Session verbs (M5): classified as meta, but the pipeline runs the side
+# effect (backup / swap / seed) and writes the final reply — `command` names
+# the verb and `arg` its argument (the save name).
+SESSION_COMMANDS = ("/save", "/load", "/new")
 
 _HELP_TEXT = (
     "Commands: /help (this), /status (your sheet + where you stand), "
     "/roll <formula> (a free dice roll, e.g. 2d20kh1+3), /world (the committed "
-    "world), /ooc <text> (out-of-character — the DM answers directly)."
+    "world), /ooc <text> (out-of-character — the DM answers directly), "
+    "/save [name] (checkpoint the campaign), /load <name> (resume a checkpoint), "
+    "/new (start a fresh campaign — only when none is running)."
 )
 
 
@@ -43,6 +54,8 @@ class ArbiterDecision:
     text: str  # the wrapped player line (game) or the command (meta)
     reply: str = ""  # the engine's answer (meta only)
     dice: list[dict] = ()  # free rolls (meta /roll only)
+    command: str = ""  # session verb ("save" | "load" | "new"); "" otherwise
+    arg: str = ""  # the session verb's argument (the save name)
 
 
 def _status_text(world: WorldState) -> str:
@@ -107,6 +120,35 @@ def arbitrate(player_text: str, world: WorldState) -> ArbiterDecision:
             if not note:
                 return ArbiterDecision(is_meta=True, text=command, reply="Usage: /ooc <text>")
             return ArbiterDecision(is_meta=True, text=command, reply="Noted. (out of character)")
+        if command in SESSION_COMMANDS:
+            arg = text.split(" ", 1)[1].strip() if " " in text else ""
+            if command == "/new":
+                if arg:
+                    return ArbiterDecision(
+                        is_meta=True, text=command, reply="Usage: /new (no argument)"
+                    )
+                return ArbiterDecision(
+                    is_meta=True, text=command, reply="Starting a fresh campaign…", command="new"
+                )
+            if not arg or not SAVE_NAME_RE.match(arg):
+                usage = "Usage: /save [name]" if command == "/save" else "Usage: /load <name>"
+                hint = "" if command == "/save" else " (a name is required)"
+                return ArbiterDecision(is_meta=True, text=command, reply=usage + hint)
+            if command == "/save":
+                return ArbiterDecision(
+                    is_meta=True,
+                    text=command,
+                    reply=f"Saving the campaign as {arg}…",
+                    command="save",
+                    arg=arg,
+                )
+            return ArbiterDecision(
+                is_meta=True,
+                text=command,
+                reply=f"Resuming the campaign from {arg}…",
+                command="load",
+                arg=arg,
+            )
     return ArbiterDecision(
         is_meta=False, text=prompts.player_action_wrap(text)
     )

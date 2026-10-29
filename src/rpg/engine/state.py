@@ -290,6 +290,7 @@ class WorldState:
         self.spine: StorySpine | None = None
         self.turn: int = 0
         self.summary: str = ""
+        self.summary_watermark: int = 0
 
     # -- queries ---------------------------------------------------------------
 
@@ -591,6 +592,18 @@ class WorldState:
             raise ValueError("spine_delta requires an op")
         self.spine.apply_delta(op, p)
 
+    # -- rolling campaign summary (M5: log-resident, replay-safe) ------------------
+
+    def _apply_summary_set(self, p: dict[str, Any], turn: int) -> None:
+        summary = _req_str(p, "summary")
+        if not summary:
+            raise ValueError("summary_set requires a non-empty summary")
+        watermark = _req_int(p, "watermark")
+        if watermark > turn:
+            raise ValueError(f"summary watermark cannot be past its own turn: {watermark} > {turn}")
+        self.summary = summary
+        self.summary_watermark = watermark
+
     # -- combat (authoritative results — committed numbers, never re-rolled) ----------
 
     def _apply_combat_begin(self, p: dict[str, Any], turn: int) -> None:
@@ -733,6 +746,7 @@ class WorldState:
         return {
             "turn": self.turn,
             "summary": self.summary,
+            "summary_watermark": self.summary_watermark,
             "pc": None
             if self.pc is None
             else {

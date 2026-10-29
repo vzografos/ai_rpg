@@ -44,6 +44,8 @@ class FakeProvider:
         tool_calls: list | None = None,
         scripted: list[LLMResponse] | None = None,
         extract_json_result: dict[str, Any] | None = None,
+        extract_json_routes: dict[str, dict[str, Any]] | None = None,
+        extract_json_queue: list[dict[str, Any]] | None = None,
     ) -> None:
         self.config = ProviderConfig(base_url="fake://test", api_key="x", model="test-model")
         self.calls: list[dict[str, Any]] = []
@@ -52,6 +54,11 @@ class FakeProvider:
         self._tool_calls = tool_calls or []
         self._scripted = list(scripted) if scripted is not None else []
         self._extract_json_result = extract_json_result or {"check": None, "combat": False}
+        # M5: route canned extract_json responses by the exact system prompt
+        # (intent / fold / facts / refresh are distinct calls); a queued
+        # response, when present, is served first (FIFO) for retry tests.
+        self._extract_json_routes = extract_json_routes or {}
+        self._extract_json_queue = list(extract_json_queue) if extract_json_queue else []
 
     async def chat(
         self,
@@ -86,7 +93,15 @@ class FakeProvider:
         self.calls.append({"extract_json": True, "system": system, "user": user})
         if self._error:
             raise ProviderError(self._error)
-        return dict(self._extract_json_result)
+        raw = None
+        if self._extract_json_queue:
+            raw = self._extract_json_queue.pop(0)
+        elif system in self._extract_json_routes:
+            raw = self._extract_json_routes[system]
+        if raw is None:
+            raw = self._extract_json_result
+        # A non-dict canned value passes through (tests the caller's guard).
+        return dict(raw) if isinstance(raw, dict) else raw
 
     async def aclose(self) -> None:
         return None

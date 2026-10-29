@@ -331,3 +331,99 @@ fragment in any committed narration, zero whole-wall violations), **misses
 seven attacks on the first round; the wall fired once (jailbreak: the
 model's first narration named the PC, "you remain Kellan Voss" →
 identity re-ask, rewritten after 1 re-ask, clean line committed).
+
+### M5 — memory + persistence: FTS5 recall, folded summary, /new /save /load (2026-10-29)
+
+**Decision:** M5 lands the state/memory layout memory layer as `dm/memory.py` (the
+keeper's recall, folded on every turn), session handling in
+`engine/events.py` (`WorldDB.recall_facts`, `backup_to`/`restore_from`),
+`session.py` (the single owner of `/new /save /load` — engine and web run
+through it), and the web session endpoints.
+
+**Semantics pinned beyond the M5 bullet list:**
+
+1. **The watermark moves only via `summary_set`.** The fold is due per
+   committed turn: every `FOLD_EVERY_TURNS = 10` turns since the last
+   watermark, or as soon as the metered total reaches
+   `FOLD_METER_FRACTION = 0.75` of the budget. Its input is the transcript
+   since the last watermark plus the in-hand pair (the turn being committed,
+   not in the log yet); its output is one `summary_set` event (summary ≤
+   `SUMMARY_MAX_CHARS = 1500`, watermark = the turn being committed) that
+   rides the same turn transaction. Fold-once, retry-once — and only on
+   overflow (the retry must come back ≤ `SUMMARY_RETRY_MAX_CHARS = 900`);
+   an empty or unparseable summary is *silent no-progress* — not an error,
+   not retried: the old summary stays, the watermark does not move, and the
+   next due turn folds again. The summary is world state (`world.summary`
+   in the stable head) and rides the log, so a restart replays it.
+2. **The context stays bounded by construction; the meter is the verdict.**
+   `build_context` drops transcript lines at or before the watermark (they
+   are folded into the summary in the stable head), keeps the last 12, and
+   trims oldest-until-fit (floor 2). The state block's facts are bounded
+   too: the FTS5 recall for the player's line (≤ `RECALL_LIMIT = 8`) plus
+   the most recent `RECENT_FACTS = 5` on record that are not already among
+   them (the debug dump shows the whole record). The client sees the verdict
+   per turn (`done.over_budget`) and the metered layout via
+   `/api/dump-context`.
+3. **Recall runs on the raw (unwrapped) player line**, not the untrusted
+   wrap — the wrap is prompt-safety text, not what the player said.
+   `recall_facts` reduces the line to FTS5 terms (lowercased, deduped,
+   stopword-free, 3+ chars) and matches the `fact_fts` index
+   (bm25-ranked, deduped by (subject, predicate, value)); an unmatchable
+   query recalls nothing. Facts enter the world only through
+   `fact_add`/`fact_remove` events — the `note` tool, or the capped,
+   deduped `extract_turn_facts` utility call (resolved-facts removal),
+   whose non-dict responses pass through the caller's guard.
+4. **Spine refresh at chapter close is the model's clamped delta path.**
+   When a beat completes, one `extract_json` call may propose only the
+   `_REFRESH_OPS` (`beat_status`/`append_detail`/`rewrite_beat`); each
+   delta goes through the same clamped `apply_delta` as the M3 tool path
+   (unknown ops, rewrites of completed beats, cross-act rewrites
+   rejected).
+5. **Sessions: one live DB + named saves; a save is self-contained.** The
+   live campaign is `$RPG_DATA/rpg.db` (the `rpg-data` volume — `docker
+   restart` resumes it). `/save [name]` takes a full copy through the
+   SQLite online-backup API (log + tables + snapshots) into
+   `$RPG_DATA/saves/<name>.db`; each save is an independently resumable
+   campaign, so multi-session is "several named saves". `/load <name>`
+   records the switch in the campaign being left, then swaps the live DB
+   for the save and rebinds. `/new` seeds the pre-authored adventure only
+   into an empty live DB (refuses otherwise and offers `/save` first).
+   Save naming is one rule (`SAVE_NAME_RE`, default `turn-<N>`); the
+   arbiter's meta verbs and the web endpoints (`/api/new /api/save
+   /api/load /api/sessions`) both run through `session.py`.
+6. **The memory quiz plants a fact every five turns, not 5/20/40**
+   (deviation from the milestone M6 bullet): with ten facts on record by turn 50 the
+   bounded recent-tail (the last five) no longer shows the turn-5 fact —
+   only the FTS5 recall for the turn-50 line can bring it back. The test
+   asserts both directions: the recalled turn-5 fact is in the state block,
+   and the older unrecalled facts are out of it.
+
+**Acceptance verified (2026-10-29):** `make check` green (ruff + 357
+tests, 2 skipped) — including `tests/web/test_memory.py`: a **52-turn
+fake-LLM session through the real web pipeline** (a `note` fact planted
+every five turns; on turn 50 the player's line recalls the turn-5 fact
+into the state block while the bounded tail leaves the old facts out and
+the folded summary rides the stable head; folds fire at turns
+10/20/30/40/50 — summary and watermark on the world and in the log; every
+turn `over_budget` False with the metered total within budget; kill+
+restart replays the log to the byte-identical world, summary included)
+plus a **checkpoint round-trip** (`/save midpoint` at turn 20, play on to
+30, `/load midpoint` — the save is self-contained and the live DB is
+swapped for it; bad names 400, unknown saves 404) and engine-level memory
+unit tests (fold overflow/empty paths, fact extraction dedupe/removal,
+recall, backup/restore, bounded state block).
+
+**Follow-ups:** the meter is still the char heuristic (a real tokenizer is
+the state/memory layout upgrade); a real-model memory-quiz run (does the DM *behave* as
+if it remembers?) is an M6 eval-harness case, not an M5 gate.
+
+**Addendum (2026-10-29): the dev volume outlives the engine code.** A
+`rpg-data` volume written by a previous engine version fails the
+`load_world` snapshot check on `make up` (first hit after M5: the stored
+hashes predate the M5 `to_dict` shape) — `docker system prune -af` does
+not remove it (no `-v`), and stopped containers from the failed startup
+keep holding it. The check still refuses to serve (the red line stands);
+`WorldCorruptionError` now names both causes (corrupt log vs stale
+volume) and the remedy (delete the database/volume, start a new session),
+pinned in `tests/engine/test_events.py`
+(`test_load_world_names_the_remedy_for_a_stale_volume`).

@@ -314,6 +314,24 @@ def test_load_world_detects_a_corrupted_log_against_the_snapshot(tmp_path: Path)
             db.load_world()
 
 
+def test_load_world_names_the_remedy_for_a_stale_volume(tmp_path: Path):
+    db_path = tmp_path / "w.db"
+    with WorldDB(db_path) as db:
+        world = fresh_world()
+        db.commit(world, [WorldEvent(turn=0, kind="world_init", payload=INITIAL)], [])
+    # The log replays cleanly under the current code, but the stored hash is
+    # what a previous engine version computed (the fingerprint input changed
+    # since) — the stale dev volume `docker system prune` (without -v)
+    # leaves behind. The refusal must name that case and the remedy.
+    conn = sqlite3.connect(db_path)
+    conn.execute("UPDATE snapshot SET world_hash = 'stale'")
+    conn.commit()
+    conn.close()
+    with WorldDB(db_path) as db:
+        with pytest.raises(WorldCorruptionError, match="previous engine version"):
+            db.load_world()
+
+
 def test_rebuild_world_matches_the_live_world_after_a_mix_of_events(tmp_path: Path):
     with WorldDB(tmp_path / "w.db") as db:
         world = fresh_world()

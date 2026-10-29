@@ -1,10 +1,13 @@
 """FastAPI app: the transport-agnostic game server (the documented layout, constraint C2).
 
-M3 surface:
+M5 surface:
     GET  /                   the single static page (chat pane + sidebar, vanilla JS)
-    GET  /api/status         app + model info (milestone M4)
+    GET  /api/status         app + model info (milestone M5)
     GET  /api/ping           one-shot LLM round-trip ("LLM says hello")
     POST /api/new            start a session: seed the pre-authored adventure
+    POST /api/save           checkpoint the campaign (named save; default turn-N)
+    POST /api/load           resume a save (swaps the live DB, rebinds)
+    GET  /api/sessions       the named saves + the live session's turn
     POST /action             player input -> the turn pipeline -> SSE frames
     GET  /api/spine          the player-safe spine projection (quest log)
     GET  /api/messages       the committed transcript (restore on reload)
@@ -31,18 +34,16 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from rpg import __version__
+from rpg import __version__, session
 from rpg.dm.loop import TurnPipeline
-from rpg.dm.spine import adventure_init_payload, load_adventure
 from rpg.engine.context import dump_context
 from rpg.engine.dice import SeededSource, SystemSource
-from rpg.engine.events import Message, WorldDB, WorldEvent, default_db_path
+from rpg.engine.events import Message, WorldDB, default_db_path
 from rpg.engine.state import WorldState
 from rpg.llm import prompts
 from rpg.llm.provider import LLMProvider, ProviderConfig, ProviderError
 
 STATIC_DIR = Path(__file__).parent / "static"
-ADVENTURE_PATH = Path(__file__).parent.parent / "content" / "shadow_crown.json"
 SSE_MEDIA_TYPE = "text/event-stream"
 
 
@@ -87,6 +88,14 @@ class ActionIn(BaseModel):
 
 class NewIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
+
+
+class SaveIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=40)
+
+
+class LoadIn(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
 
 
 def _live_world(request: Request) -> WorldState:
@@ -134,7 +143,7 @@ async def status(request: Request) -> dict[str, Any]:
     return {
         "app": "ai_rpg",
         "version": __version__,
-        "milestone": "M4",
+        "milestone": "M5",
         "model": provider.config.model,
         "base_url": provider.config.base_url,
         "world": bool(world is not None and not world.is_empty),
@@ -166,27 +175,67 @@ async def new_session(body: NewIn, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail="a session is already running in this database")
     db: WorldDB = request.app.state.db
     provider: LLMProvider = request.app.state.provider
-    adventure = load_adventure(ADVENTURE_PATH)
-    payload = adventure_init_payload(adventure, pc_name=body.name)
-    turn = world.turn
-    world.apply_event("world_init", payload, turn)
-    world.apply_event("spine_set", {"spine": adventure.spine.to_dict()}, turn)
-    db.commit(
-        world,
-        [
-            WorldEvent(turn=turn, kind="world_init", payload=payload),
-            WorldEvent(turn=turn, kind="spine_set", payload={"spine": adventure.spine.to_dict()}),
-        ],
-        [
-            Message(turn=turn, role="user", content=f"/new {body.name or adventure.pc['name']}"),
-            Message(
-                turn=turn,
-                role="narration",
-                content=f"Session started: {adventure.title} (model {provider.config.model}).",
-            ),
-        ],
-    )
+    try:
+        world, _ = session.seed_adventure(db, pc_name=body.name, model=provider.config.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    request.app.state.world = world
+    request.app.state.pipeline = None
     return {"ok": True, "turn": world.turn, "world": world.to_dict()}
+
+
+@app.post("/api/save")
+async def save_session(body: SaveIn, request: Request) -> dict[str, Any]:
+    """Checkpoint the campaign: a named save the player can /load later."""
+    world = _live_world(request)
+    if world.is_empty:
+        raise HTTPException(status_code=409, detail="no world yet — start a session: POST /api/new")
+    db: WorldDB = request.app.state.db
+    try:
+        name = session.save_session(db, world, body.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "name": name, "turn": world.turn}
+
+
+@app.post("/api/load")
+async def load_session(body: LoadIn, request: Request) -> dict[str, Any]:
+    """Resume a save: swap the live DB for it and rebind the session."""
+    db: WorldDB = request.app.state.db
+    world = _live_world(request)
+    name = body.name.strip()
+    if not session.save_path(name).exists():
+        saves = ", ".join(session.list_saves()) or "none"
+        raise HTTPException(status_code=404, detail=f"no such save: {name} (available: {saves})")
+    if not world.is_empty:
+        # Record the switch in the campaign being left, then swap (M5).
+        turn = world.turn
+        db.commit(
+            world,
+            [],
+            [
+                Message(turn=turn, role="user", content=f"/load {name}"),
+                Message(turn=turn, role="narration", content="Switching to the saved campaign."),
+            ],
+        )
+    try:
+        world = session.load_session(db, name)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    request.app.state.world = world
+    request.app.state.pipeline = None
+    return {"ok": True, "name": name, "turn": world.turn, "world": world.to_dict()}
+
+
+@app.get("/api/sessions")
+async def sessions(request: Request) -> dict[str, Any]:
+    """The named saves + the live session (M5: multi-session, restart resume)."""
+    world: WorldState | None = request.app.state.world
+    return {
+        "saves": session.list_saves(),
+        "turn": None if (world is None or world.is_empty) else world.turn,
+        "world": bool(world is not None and not world.is_empty),
+    }
 
 
 @app.post("/action")
@@ -196,6 +245,9 @@ async def action(body: ActionIn, request: Request) -> StreamingResponse:
 
     async def frames() -> AsyncIterator[str]:
         result = await pipeline.run(body.text)
+        if result.session_changed:
+            # /load or /new rebinds the pipeline's world: follow it.
+            request.app.state.world = pipeline.world
         for event, data in result.frames:
             yield sse_frame(event, data)
 

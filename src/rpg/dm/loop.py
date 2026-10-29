@@ -17,28 +17,35 @@
                    from the committed events
    7. commit       the event log + tables exactly once (the turn is the unit
                    of persistence; a crash mid-turn replays the turn)
-  8. spine        tick the active beat's waypoints, advance on completion
-  9. render       the narration from committed state as SSE frames
+   8. spine        tick the active beat's waypoints, advance on completion
+   8b. memory     M5: the non-blocking upkeep, pre-commit — clamped spine
+                  refresh at a completed beat, the turn's fact extraction,
+                  the rolling summary fold (due by turn count or meter)
+   9. render       the narration from committed state as SSE frames
 
 The LLM never owns numbers (C3): the narration is written from the
 authoritative tool results and must reflect them verbatim. The turn is
 never lost: a provider failure mid-loop falls back to a deterministic
-narration built from the events that already committed.
+narration built from the events that already committed. The M5 memory
+steps are never fatal either — a failed upkeep skips that step and the
+turn still commits.
 """
 
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass, field
 
-from rpg.dm import arbiter
+from rpg import session
+from rpg.dm import arbiter, memory
 from rpg.dm.tools import DM_TOOLS, ToolEngine
 from rpg.engine.backstops import (
     MAX_BACKSTOP_REASKS,
     fallback_narration,
     run_backstops,
 )
-from rpg.engine.context import build_context
+from rpg.engine.context import RECALL_LIMIT, build_context
 from rpg.engine.dice import SeededSource, SystemSource
 from rpg.engine.events import Message, WorldDB, WorldEvent
 from rpg.engine.sheet import ABILITIES
@@ -65,6 +72,7 @@ class TurnResult:
     usage: dict = field(default_factory=dict)
     was_meta: bool = False
     over_budget: bool = False  # the context no longer fits its meter
+    session_changed: bool = False  # /load or /new rebinds the pipeline's world (M5)
 
 
 class TurnPipeline:
@@ -97,6 +105,8 @@ class TurnPipeline:
         decision = arbiter.arbitrate(player_text, world)
         if decision.is_meta:
             result.was_meta = True
+            if decision.command:  # M5: /new /save /load — the engine's session verbs
+                return self._run_session_command(result, decision, turn, player_text.strip())
             result.narration = decision.reply
             result.dice = list(decision.dice)
             self.db.commit(
@@ -109,21 +119,116 @@ class TurnPipeline:
             )
             self._render(result, turn)
             return result
-        return await self._run_game_turn(result, decision.text, turn)
+        return await self._run_game_turn(result, decision.text, turn, player_text.strip())
+
+    def _run_session_command(
+        self, result: TurnResult, decision: arbiter.ArbiterDecision, turn: int, raw_line: str
+    ) -> TurnResult:
+        """The M5 session verbs: the side effect, then the meta record.
+
+        /save checkpoints the live DB before the meta pair commits (the save
+        never contains its own "Saved:" line); /load records the switch in
+        the campaign being left, then swaps the live DB for the save and
+        rebinds; /new seeds the adventure only into an empty live DB.
+        """
+        world = self.world
+        command = decision.command
+        arg = decision.arg
+        swapped = False
+        if command == "save":
+            try:
+                name = session.save_session(self.db, world, arg)
+            except (ValueError, OSError) as exc:
+                self._error(result, f"save: {exc}")
+                result.narration = f"Save failed: {exc}"
+            else:
+                result.narration = (
+                    f"Saved: {name} (turn {world.turn}). Resume it with /load {name}."
+                )
+        elif command == "load":
+            if not session.save_path(arg).exists():
+                saves = ", ".join(session.list_saves()) or "none"
+                self._error(result, f"load: no such save: {arg}")
+                result.narration = f"No such save: {arg} (available: {saves})."
+            else:
+                # Record the switch in the campaign being left — before the
+                # swap, since the live DB is replaced in place.
+                self.db.commit(
+                    world,
+                    [],
+                    [
+                        Message(turn=turn, role="user", content=raw_line),
+                        Message(
+                            turn=turn, role="narration", content="Switching to the saved campaign."
+                        ),
+                    ],
+                )
+                try:
+                    loaded = session.load_session(self.db, arg)
+                except (ValueError, OSError, sqlite3.Error) as exc:
+                    self._error(result, f"load: {exc}")
+                    result.narration = f"Load failed: {exc} — the live database was not restored."
+                else:
+                    self.world = loaded
+                    self.engine = ToolEngine(loaded, self.dice)
+                    result.session_changed = True
+                    result.turn = loaded.turn
+                    result.narration = f"Resumed {arg} (turn {loaded.turn})."
+                    swapped = True
+        else:  # "new"
+            if not world.is_empty:
+                self._error(result, "new: a session is already running")
+                result.narration = (
+                    f"A session is already running (turn {world.turn}) — save it first "
+                    "(/save [name]), then /new."
+                )
+            else:
+                try:
+                    world, started = session.seed_adventure(
+                        self.db, model=self.provider.config.model
+                    )
+                except (ValueError, OSError) as exc:
+                    self._error(result, f"new: {exc}")
+                    result.narration = f"New session failed: {exc}"
+                else:
+                    self.world = world
+                    self.engine = ToolEngine(world, self.dice)
+                    result.session_changed = True
+                    result.turn = world.turn
+                    result.narration = started
+        if swapped:
+            # The live DB is the save now: the resumed campaign continues from
+            # its saved state (the "Resumed" line is not committed anywhere).
+            self._render(result, result.turn)
+            return result
+        self.db.commit(
+            self.world,
+            [],
+            [
+                Message(turn=turn, role="user", content=raw_line),
+                Message(turn=turn, role="narration", content=result.narration),
+            ],
+        )
+        self._render(result, turn)
+        return result
 
     async def _run_game_turn(
-        self, result: TurnResult, wrapped_line: str, turn: int
+        self, result: TurnResult, wrapped_line: str, turn: int, raw_line: str
     ) -> TurnResult:
         world = self.world
         self.engine.begin_turn()
         # 2. intent — the cheap advisory call (never fatal).
         intent = await self._decide_intent(world, wrapped_line)
         # 3. context — stable head (with the spine [NOW]) + volatile tail.
+        # M5: the FTS5 recall for the player's own line bounds the state
+        # block's facts (recalled + most recent, not the whole record).
+        recalled = self.db.recall_facts(raw_line, limit=RECALL_LIMIT)
         context = build_context(
             world,
             messages=self.db.messages(),
             spine_now=world.spine.now_block() if world.spine is not None else None,
             player_line=wrapped_line,
+            recalled=recalled,
         )
         result.over_budget = not context.meter.fits()
         llm_messages: list[dict] = [
@@ -152,17 +257,52 @@ class TurnPipeline:
         # 8. the spine: tick the waypoints the world just justified, THEN
         # advance the beat (advancing checks the post-tick state).
         spine = world.spine
+        completed_text = ""
         if spine is not None:
             for payload in spine.progress_events(world):
                 world.apply_event("spine_delta", payload, turn=turn)
                 events.append(WorldEvent(turn=turn, kind="spine_delta", payload=payload))
             advances = spine.advance_events()
             for payload in advances:
+                try:
+                    completed_text = spine.beat(payload["beat"]).text
+                except (KeyError, TypeError, ValueError):
+                    completed_text = ""
                 world.apply_event("spine_delta", payload, turn=turn)
                 events.append(WorldEvent(turn=turn, kind="spine_delta", payload=payload))
             if advances:
                 beat = spine.active_beat
                 result.beat = beat.to_dict() if beat is not None else None
+        # 8b. memory (M5): the non-blocking upkeep, pre-commit — its events
+        # ride the same turn transaction. Order: refresh (a chapter close),
+        # facts (the turn just played), fold last (it covers this turn).
+        if completed_text:
+            events.extend(
+                await memory.refresh_spine(
+                    self.provider, world, completed_text=completed_text, errors=result.errors
+                )
+            )
+        events.extend(
+            await memory.extract_turn_facts(
+                self.provider,
+                world,
+                line=raw_line,
+                narration=result.narration,
+                events=events,
+                errors=result.errors,
+            )
+        )
+        if memory.fold_due(world, context.meter.total):
+            fold_event = await memory.fold_summary(
+                self.provider,
+                world,
+                memory.fold_history(
+                    world, self.db.messages(), line=raw_line, narration=result.narration
+                ),
+                errors=result.errors,
+            )
+            if fold_event is not None:
+                events.append(fold_event)
         # 7/9. commit exactly once (the turn is the unit of persistence),
         # then render the narration from committed state.
         self.db.commit(

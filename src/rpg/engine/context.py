@@ -1,18 +1,22 @@
-"""Context builder (roadmap M2): stable head + volatile tail + trimmed history.
+"""Context builder (roadmap M2, extended by M5): stable head + volatile tail.
 
 Layout (Loreweaver's split, the state/memory layout):
 - stable head (system message, cacheable): DM identity, rules summary,
   GM-quality standards, keeper-discipline block, spine [NOW] block (M3),
-  rolling campaign summary (M5).
+  rolling campaign summary (M5: `world.summary`, folded by the memory step
+  and riding `summary_set` events in the log).
 - volatile tail (user message, headed "Current game state
   (engine-provided, not spoken by any player)"): location, PC sheet, NPC
   roster (agendas never — keeper-only) with M4 "NPC knows" scoping lines
-  (the record an NPC may voice), open quests, items, recalled facts,
-  current combat, trimmed recent transcript, player line.
+  (the record an NPC may voice), open quests, items, facts (M5: FTS5-
+  recalled for the player's line plus the most recent — or all, in the
+  dump), current combat, trimmed recent transcript, player line.
 
-The prompt is metered (token heuristic: chars/4) and the transcript trims
-toward the budget. `dump_context` renders the whole thing for the
-`/dump-context` debug command (CLI + web).
+M5 memory: transcript lines at or before the summary's watermark are
+replaced by the folded summary (the watermark moves only via `summary_set`),
+so a long session stays bounded. The prompt is metered (token heuristic:
+chars/4) and the transcript trims toward the budget. `dump_context` renders
+the whole thing for the `/dump-context` debug command (CLI + web).
 """
 
 from __future__ import annotations
@@ -21,12 +25,14 @@ import math
 from dataclasses import dataclass
 
 from rpg.engine.events import Message
-from rpg.engine.state import WorldState
+from rpg.engine.state import Fact, WorldState
 from rpg.llm import prompts
 
 __all__ = [
     "DEFAULT_CONTEXT_BUDGET",
     "DEFAULT_MAX_MESSAGES",
+    "RECALL_LIMIT",
+    "RECENT_FACTS",
     "ContextMeter",
     "Context",
     "estimate_tokens",
@@ -38,6 +44,8 @@ __all__ = [
 
 DEFAULT_CONTEXT_BUDGET = 8000  # estimated tokens (roadmap M2: metered, bounded)
 DEFAULT_MAX_MESSAGES = 12  # recent transcript lines kept before trimming
+RECALL_LIMIT = 8  # M5: the most facts FTS5 recalls per turn (the state block's cap)
+RECENT_FACTS = 5  # M5: recent facts shown alongside the recall (bounded state block)
 
 
 def estimate_tokens(text: str) -> int:
@@ -88,11 +96,30 @@ def _npc_knows(world: WorldState, name: str) -> str:
     return "; ".join(record)
 
 
-def state_block(world: WorldState) -> str:
+def _fact_key(fact: Fact) -> tuple[str, str, str]:
+    return (fact.subject.casefold(), fact.predicate.casefold(), fact.value.casefold())
+
+
+def _shown_facts(world: WorldState, recalled: list[Fact] | None) -> list[Fact]:
+    """The facts the state block shows (M5: bounded, recall-first).
+
+    With a recall (a turn with a player line): the FTS5-recalled facts, plus
+    the most recent `RECENT_FACTS` on record that are not already among
+    them. Without one (the dump, or a line-less turn): every fact on record.
+    """
+    if recalled is None:
+        return list(world.facts)
+    seen = {_fact_key(fact) for fact in recalled}
+    recent = [fact for fact in world.facts if _fact_key(fact) not in seen][-RECENT_FACTS:]
+    return list(recalled) + recent
+
+
+def state_block(world: WorldState, *, recalled_facts: list[Fact] | None = None) -> str:
     """The volatile-tail state section (engine-provided; never spoken).
 
     Keeper-only data (NPC agendas, keeper notes' source) is excluded by
     construction — this text goes to the model as what the player may know.
+    `recalled_facts` (M5) bounds the fact list to what the turn recalls.
     """
     lines = [prompts.STATE_HEADER]
     pc = world.pc
@@ -140,7 +167,7 @@ def state_block(world: WorldState) -> str:
             where = "location unknown"
         suffix = f" — {item.description}" if item.description else ""
         lines.append(f"Item: {item.name} ({where}){suffix}")
-    for fact in world.facts:
+    for fact in _shown_facts(world, recalled_facts):
         lines.append(f"Fact (turn {fact.turn}): {fact.subject} {fact.predicate} {fact.value}")
     if world.combat is not None:
         combat = world.combat
@@ -231,16 +258,22 @@ def build_context(
     max_messages: int = DEFAULT_MAX_MESSAGES,
     spine_now: str = "",
     player_line: str | None = None,
+    recalled: list[Fact] | None = None,
 ) -> Context:
     """Assemble + meter the turn prompt.
 
-    The transcript keeps the last `max_messages` history lines; if the
-    metered total still exceeds the budget, oldest lines drop until it fits
-    (floor: the last two lines — below that there is nothing left to trim).
+    M5: transcript lines at or before the summary's watermark are already
+    folded into `world.summary` (the stable head) and are dropped here — a
+    long session stays bounded. The transcript then keeps the last
+    `max_messages` history lines; if the metered total still exceeds the
+    budget, oldest lines drop until it fits (floor: the last two lines —
+    below that there is nothing left to trim).
     """
     system = stable_head(world, spine_now=spine_now)
-    state = state_block(world)
+    state = state_block(world, recalled_facts=recalled)
     history = list(messages or [])
+    if world.summary:
+        history = [message for message in history if message.turn > world.summary_watermark]
     transcript = history[-max_messages:]
     meter = _meter(system, state, transcript, player_line, budget)
     while not meter.fits() and len(transcript) > 2:
@@ -263,8 +296,14 @@ def dump_context(
     max_messages: int = DEFAULT_MAX_MESSAGES,
     spine_now: str = "",
     player_line: str | None = None,
+    recalled: list[Fact] | None = None,
 ) -> str:
-    """The readable `/dump-context` output: meter table + both messages."""
+    """The readable `/dump-context` output: meter table + both messages.
+
+    The dump is a debug view: it meters exactly what the turn prompt carries
+    (watermark trim and all), but shows every fact on record (`recalled`
+    defaults to None).
+    """
     context = build_context(
         world,
         messages=messages,
@@ -272,6 +311,7 @@ def dump_context(
         max_messages=max_messages,
         spine_now=spine_now,
         player_line=player_line,
+        recalled=recalled,
     )
     meter = context.meter
     verdict = "fits" if meter.fits() else "OVER BUDGET"
