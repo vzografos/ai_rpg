@@ -17,7 +17,7 @@ depends on.
 | M3 | Story spine + DM loop | a human plays 10–20 turns through `shadow_crown` from a browser; fake-LLM 10-turn pipeline test | Fake session passes; live HTTP run advanced beat 1; human browser session completed 19 committed actions (UI counter 20) without a crash. |
 | M4 | Backstops + anti-hack | red-line suite fails without the backstops, passes with them; one documented real-model run | Fake-LLM red-line suite passes; real-model run is documented, not repeated in this audit. |
 | M5 | Memory + persistence | turn-5 facts still shape turn 50; context stays bounded (measured) | 52-turn memory and save/load tests pass. A 30-turn qwen38 probe selected an old fact through FTS in a simulated prompt, but the read-only model answer was empty; folds stayed at watermark 0 and turn 27 emitted 116 DM fact-adds (111 duplicate triples). The 50+ turn real-model acceptance remains open. |
-| M6 | Scoring, conformance, evals, deployment | conformance adventure completes deterministically; honest eval report; clean-machine image | Conformance/eval tests and production smoke pass; real-model report and clean-machine acceptance remain. |
+| M6 | Scoring, conformance, evals, deployment | conformance adventure completes deterministically; honest eval report; clean-machine image | **Complete (2026-11-01):** real-model qwen38 eval reports committed (`evals/reports/`, 3 archetypes); clean-machine acceptance passed — tarball → fresh `docker load` → bare read-only run with a live LLM turn (found and fixed a defect: the image CMD's `uv run` needed a writable cache). |
 
 Cut order if a milestone overruns: M5 → M6 evals. **Never cut M4**
 (backstops are load-bearing).
@@ -577,13 +577,26 @@ intent, the server requires committed evidence, and the disagreement is
 itself a finding. One probe artifact: the saboteur's "teleport" claim
 "landed" only because the DM's refusal contains the word.
 
-**Follow-ups:** the open question #7 (`/undo` exposure) remains open;
-the real-model memory-quiz case (does the DM *behave* as if it
-remembers?) is now partly covered by the explorer archetype but deserves
-a dedicated probe; `ruff format` is not part of the gate (23 files
-pre-existing unformatted — decide gate-or-ignore before M7); paraphrase
-leakage + prose dice-first misses + the `note`-commit gap are the three
-concrete M7 candidates this eval surfaced.
+**Follow-ups:** the real-model memory-quiz case (does the DM *behave* as
+if it remembers?) is now partly covered by the explorer archetype but
+deserves a dedicated probe; `ruff format` is not part of the gate (23
+files pre-existing unformatted — decide gate-or-ignore before any
+post-v1 work); paraphrase leakage + prose dice-first misses + the
+`note`-commit gap are the three concrete post-v1 candidates this eval
+surfaced. Open question #7 was resolved the same day (entry below).
+
+### M6 — open question #7 resolved: `/undo` stays internal (2026-11-01)
+
+**Decision:** `/undo` is **not exposed for v1**; snapshots stay an
+engine-internal mechanism. Rewind would mean destructive tail surgery on
+the append-only event log (or inverse-events for every event kind) — the
+exact property M2's replay/rebuild tests guard — plus interaction with
+M5 folds (watermark) and named saves; that is milestone-sized risk for
+convenience. The felt need is covered for v1 by `/load` and `/new`.
+**Revisit only if players actually ask.** Safe implementation when it
+comes: `snapshot_for(turn-1)` restore + log-tail truncation + table
+resync, gated by a red-line test asserting replay-after-undo is
+byte-identical (the M2 property test). 
 
 ### Verification audit (2026-10-31)
 
@@ -612,10 +625,18 @@ A live HTTP `/action` request also committed turn 1 and returned `quest`,
 remains open (the 30-turn qwen38 probe is documented in the M5 section:
 FTS selected the old fact in a simulated prompt, but the read-only model
 answer was empty, the summary watermark stayed at 0, and turn 27 emitted
-116 DM fact-add events with 111 duplicate triples); no M6
-real-model eval report was present in the repo snapshot, and the clean-machine
-image acceptance was not run. The real-model M4 seven-attack run remains
-documented above but was not repeated in this audit.
+116 DM fact-add events with 111 duplicate triples). The real-model M4
+seven-attack run remains documented above but was not repeated in this
+audit.
+
+**M6 items resolved (2026-11-01):** the real-model eval report is in the
+repo (`evals/reports/` — qwen38 explorer/talker/saboteur, judge 34/35)
+and the clean-machine acceptance passed: image tarball → fresh
+`docker load` → bare `docker run --read-only` on a fresh volume with
+page/status/seed plus one live LLM turn. That acceptance found a defect
+(the image CMD's `uv run` needed a writable cache, fatal under
+`--read-only`) — the CMD now invokes the baked venv directly, and the
+`prod` compose service relies on it (its command override was removed).
 
 ### M1 coverage closure (2026-10-31)
 

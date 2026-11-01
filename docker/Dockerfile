@@ -32,4 +32,7 @@ USER rpg
 
 EXPOSE 8080
 
-CMD ["uv", "run", "uvicorn", "rpg.web.app:app", "--host", "0.0.0.0", "--port", "8080"]
+# The baked venv's interpreter directly — no `uv run` at runtime: uv wants a
+# writable cache, which a read-only rootfs (correctly) refuses. Found by the
+# clean-machine acceptance (bare `docker run --read-only` died on /cache/uv).
+CMD ["/app/.venv/bin/python", "-m", "uvicorn", "rpg.web.app:app", "--host", "0.0.0.0", "--port", "8080"]
