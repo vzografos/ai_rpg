@@ -1,0 +1,422 @@
+{
+  "model": "qwen38",
+  "archetype": "explorer",
+  "intent": "A careful player who plays the story the way it is offered: asks the right people, takes the right things, rests when hurt, and fights when there is nothing left to talk. The progress benchmark \u2014 if the DM keeps up, the campaign completes.",
+  "target_beat": "Unmake the crown and bring the light back",
+  "final_position": {
+    "completed": 1,
+    "active": "Find the candle that can unmake the crown",
+    "is_over": false
+  },
+  "is_over": false,
+  "usage": {
+    "prompt_tokens": 235778,
+    "completion_tokens": 57779
+  },
+  "violations": {},
+  "claims_landed": [],
+  "turns": [
+    {
+      "turn": 1,
+      "player_line": "I ask Brenna about the harvest.",
+      "narration": "The tavern door swings shut behind you, and the smell of ale and woodsmoke thickens the air. Brenna doesn't look up from the counter, only wipes the same spot on the bar twice. \"The harvest's gone,\" she says, flat as a door. \"Three nights, and the grain turns black at the root. Folks say a shadow settled on the land.\" Her eyes come up, and they hold yours a beat too long. \"Ain't a thing I talk about at the table.\" A boy's voice \u2014 Tallow, small and quick \u2014 drifts from the back corner, and the door to the mayor's hall stands open across the square.",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "none",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Brenna's answer advances the harvest beat without revealing hidden agendas or forcing a dice result."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 2,
+      "player_line": "I head to the tavern.",
+      "narration": "You're already inside \u2014 the hearth is still crackling on your left, and Brenna hasn't moved from the counter, rag still circling the same spot. Tallow darts past with an empty mug, eyes flicking your way like a field mouse sizing up a hawk. The village square is a door's worth of steps behind you, lantern-light spilling in; across it, the mayor's hall door stands open on the night air.\n\nBrenna gives you one long look. \"Well,\" she says. \"You're either going to ask me something I won't answer, or you're going to stand there getting in my way.\"\n\nWhat would you like to do \u2014 press Brenna for more, corner Tallow, or step out into the square?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "none",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "stall",
+        "notes": "The narration keeps the scene at the tavern without advancing the harvest-shadow beat."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 3,
+      "player_line": "I find Old Maren by the chapel steps and ask her about the blackened fields.",
+      "narration": "You leave the hearth's warmth behind and cross the square to the chapel steps. Old Maren is where she's always been \u2014 seated with her basket set a step out of reach, the way it's always set. She looks up, eyes sharp as a crow's, and takes in the torch in your hand without flinching.\n\n\"Black at the root,\" she says, nodding slowly at your question. \"Ain't rot. Rot comes up out of the earth. This comes down from above.\" Her voice drops, dry as the dead field itself. \"The last king \u2014 the one they laid in the crypt under this very ground \u2014 he died mid-crowning. The crown sat on his brow when the shadow took him, and it's been gnawing at your grain ever since. Three nights now, and it's hungry again.\"\n\nShe leans in, then stops herself, her gaze drifting to the rim of her basket. \"I know what can unmake the thing. I've always known.\" She taps a knuckle against the wicker, once, twice. \"But I don't give it away for nothing, child. You've seen where my basket sits. You know what it takes to close the distance.\"\n\nThe want in her eyes is plain and old: bread. The real kind, warm, with the crust still on it.\n\nWhat will you do \u2014 find her a loaf and earn the name she's holding, press her some other way, or step back and let her keep it?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Old Maren\u2019s answer is triggered by the player\u2019s question and advances the candle quest without revealing hidden agendas."
+      },
+      "judge_error": "",
+      "errors": [
+        "spine refresh: dropped a delta (spine field 'beat' must be an int, got 'Find the candle that can unmake the crown')",
+        "spine refresh: dropped a delta (spine field 'beat' must be an int, got \"Pass the undercroft into the King's Crypt\")"
+      ]
+    },
+    {
+      "turn": 4,
+      "player_line": "I go to the mayor's hall.",
+      "narration": "The hall's door stands open onto the night, and inside the air smells of beeswax and cold. Mayor Aldous stands at the far end of the room with his back half-turned, a good coat riding on narrow shoulders. At his feet, on a low table, sits a wooden box the size of a bread-loaf \u2014 banded in iron, its lid slightly warped. He hasn't looked at it, but his hand rests on its edge the way a man rests on a sleeping dog.\n\nHear your footstep and he turns, quick for a man his build. \"Evening. You're the one asking questions about the grain.\" His eyes flick once to the box, then back to you, and something tightens behind them. \"This is a private room. Whatever you've come to ask, best ask it quick.\"\n\nWhat will you do \u2014 ask about the box, ask about the stranger he's been hiding, or test him some other way?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "leak",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "The action prompt leaks the mayor's hidden stranger, but the scene advances to Mayor Aldous."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 5,
+      "player_line": "I take the candle from the shelf.",
+      "narration": "Your hand closes around the white candle before Aldous can even lift his \u2014 it's warm in your grip, warmer than wax has any right to be, and the cold smell of the room seems to pull back from it a half-step.\n\nAldous goes very still. \"Put that back,\" he says, quiet, and his hand has moved off the box to his belt. \"You don't know what that is, and you don't know what's coming for it.\" His eyes are on the candle, not your face. \"The stranger I sold the seal to \u2014 he's not the only one who's been asking about this hall.\"\n\nWhat will you do \u2014 press him while his nerve is thin, back off and leave the hall, or test what this warm candle does in the dark?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "The narration matches the successful snatch and advances the candle beat without leaking hidden keeper material."
+      },
+      "judge_error": "",
+      "errors": [
+        "fact extraction: Model returned no parseable JSON (finish_reason=length): ''"
+      ]
+    },
+    {
+      "turn": 6,
+      "player_line": "I press Mayor Aldous about the seal.",
+      "narration": "Aldous's jaw works twice before it gives. \"Three nights ago,\" he says, low and fast, \"a stranger came to my door and bought the hall's seal. Paid in coin I couldn't refuse, and he asked after the undercroft \u2014 the door under the chapel, the one that opens on the crypt.\" His hand is on his belt now, where a key turns against his hip, and his eyes keep sliding to the door. \"I don't know who sent him. I don't know what he's for. The seal's gone, and the key stays on me.\" He swallows. \"Ask me anything else, quick, because I'd rather be walking home by the minute this one's done.\"\n\nThe candle in your hand gives off a warmth that doesn't belong in a room this cold.\n\nWhat will you do \u2014 press him for the key while his nerve is still spent, ask what the stranger looked like, or let him bolt and follow him down?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "The successful press earns Aldous's confession and points the player toward the undercroft."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 7,
+      "player_line": "I go down into the undercroft.",
+      "narration": "You leave the mayor's hall without another word \u2014 Aldous's chair scrapes as he follows you to the door, then the room's cold takes him back. The square is quiet under the lanterns, and the chapel door stands ajar.\n\nFather Cael is on the steps before you reach them, hands shaking so hard the words come out blurred. \"Hold still,\" he murmurs, and presses his palms to your brow a breath's length. \"The dark keeps off where the blessing is. I don't know what else it is. I know only that.\" His eyes catch the white candle in your hand and go very wide \u2014 then away again, before he can ask.\n\nThe undercroft door breathes cold. You go down, torch in one hand, the unburnt candle warm in the other. The stairs are older than the chapel, and the torchlight stops at the wall and stays there, the dark beyond it not merely unlit but *attentive*. The blessing thins as you descend, a held breath you can feel going thin at the back of your neck.\n\nAt the bottom, someone is breathing. Grave-digger Sable crouches in a shaft of nothing, trowel in his fist, and does not look at you when your light finds him. \"I opened the door for him,\" he says, to the floor, three nights ago. \"Three nights ago.\"\n\nThe candle in your hand is warm as a living thing. The torch sputters in the dark that is leaning in.\n\nWhat do you light \u2014 keep the torch as your only light, or strike a spark to the candle of Vell?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {},
+      "judge_error": "Model returned no parseable JSON (finish_reason=length): ''",
+      "errors": [
+        "fact extraction: Model returned no parseable JSON (finish_reason=length): '{\\n  \"facts\": [\\n    {'"
+      ]
+    },
+    {
+      "turn": 8,
+      "player_line": "I talk to Sable, the grave-digger.",
+      "narration": "You crouch down to his level in the shaft of nothing, and Sable's eyes still won't find yours \u2014 they track the floor like it's the only honest thing left. His trowel knocks once against stone, and he starts again, the words coming out in a broken order.\n\n\"I opened the door,\" he says, to the floor. \"Three nights ago. He had the hall's seal in his hand, and he never raised his voice. Never raised his voice. I told myself it was a priest's errand, and I meant it, and I don't mean it now.\" His heavy hands work the trowel until the soil is a fine grey dust. \"I can't sleep. I can't eat. The dark's been in my eyes since, and it won't let go.\"\n\nThe torch sputters again, and the dark leans in a half-step closer to both of you. Sable flinches without looking up. \"Whatever you're down here for \u2014 I'll tell you the rest. I just... I need it to stop counting me as a hand that opened that door.\" His voice cracks on the last word.\n\nThe candle of Vell sits unburnt in your other hand, warm as a living thing, while the torch gutters. What will you do \u2014 promise him the forgiveness he's begging for, ask him plainly what the stranger did on the stairs, or strike a spark to the candle and let his eyes meet yours in its light?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Sable's confession is a direct response to the player talking to him and advances the crypt clue."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 9,
+      "player_line": "I confront the thing guarding the altar.",
+      "narration": "You go past Sable without a word \u2014 he doesn't stop you, and the torchlight finds the altar, and what stands before it finds you in the same breath. A shape of cold that was a man once, and it does not speak.\n\nYou act first. Your blade slips out of its line and passes wide through the cold air \u2014 a fumble even you can feel in the wrist. The wight answers with a hand like a frozen branch, and it too finds nothing but air.\n\nThen you find the mark. The edge bites in, and the shape shudders as cold water shudders. Its reach finds no purchase on you. Again the blade takes flesh of cold, and again its hand swings through empty air. Once more it stumbles on the stone itself, the blow a fumble that misses clean.\n\nThe last strike drives home, and the shape goes slack. The cold floods out of it like a long breath, and it drops to the flagstones, unconscious \u2014 not gone. Not yet. You are whole, not a scratch on you, and the night's work earns you 50 XP.\n\nThe torchlight steadies. On the altar, the black iron circlet waits, and the shadow under it moves like something breathing. And in the dark beyond your light, a tall figure in a prophet's grey has been watching the whole time. His voice is soft, and every word is true: \"The guardian was faithful. You are the first to pass it. The crown is unguarded now.\"\n\nWhat will you do \u2014 take the crown from the altar, light the candle of Vell and let it show you what the dark is hiding, or step into the light and ask the prophet what he is?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "leak",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "The narration confirms Vesper's never-lies trait from keeper notes without the player earning it."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 10,
+      "player_line": "I go down into the King's Crypt.",
+      "narration": "You're already in it, in fact \u2014 the stone ends where you stand, and the only way out is the stairs back up to the undercroft. The crypt spreads around you: the tomb of Aldric the Last, a slab older than the chapel above it; and the black basalt altar, where the black iron circlet waits, the shadow under it moving like something breathing.\n\nThe wight's cold shape lies on the flagstones where you dropped it \u2014 still, unconscious, not gone, frost beading on the stone around it. Behind you, far up the stairs, something breathes in the undercroft. And in the dark beyond the edge of your torchlight, the tall figure in the prophet's grey has not moved an inch, and has not looked away.\n\nThe candle in your hand is warm and unburnt, the only thing in this room that seems to want lighting. What will you do \u2014 take the crown from the altar, strike a spark to the candle of Vell, or speak to the prophet who is waiting?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "none",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "The narration confirms the player is in the crypt and offers choices without leaking hidden agendas or forcing a roll outcome."
+      },
+      "judge_error": "",
+      "errors": [
+        "memory fold: Model returned no parseable JSON (finish_reason=length): ''"
+      ]
+    },
+    {
+      "turn": 11,
+      "player_line": "I rest, then take the crown from the altar.",
+      "narration": "You reach for the circlet and your hand comes up empty \u2014 the shadow under it slides off the altar like spilled water, and the black iron isn't there. Then the flagstones are ice. The wight is on its feet before the cold fully lands, and your first strike is a fumble that passes clean through the air. Its hand finds you instead \u2014 nine points of cold through your ribs, then another, then one more, and the torchlight goes to a white pinprick. The last thing you feel is the candle, warm in your fist even as the dark closes over you.\n\nYou wake on the flagstones with 1 HP left in you, the candle still burning in your grip, and the circlet back on the altar where the shadow under it moves like something breathing. The wight lies broken and still a step away \u2014 gone, this time. And the tall figure in the prophet's grey has not moved an inch, has not raised his voice, and has not once reached for the crown. \"You fell,\" he says, softly. \"The crown is still unguarded. The moon is three nights high.\"\n\nWhat will you do \u2014 take the crown now with the wight finally down, strike the candle's light into the dark around the altar, or ask the prophet in grey what he has been waiting for?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "none",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "The narration follows the engine's failed snatch, wight combat, and 1 HP wake-up without revealing Vesper's hidden agenda."
+      },
+      "judge_error": "",
+      "errors": [
+        "tool rest: REJECTED: already at full HP with no spell slots to recover \u2014 nothing to rest",
+        "tool end_combat: REJECTED: the engine derives 'defeat' from the committed state, not 'victory'",
+        "fact extraction: Model returned no parseable JSON (finish_reason=length): ''",
+        "memory fold: Model returned no parseable JSON (finish_reason=length): ''"
+      ]
+    },
+    {
+      "turn": 12,
+      "player_line": "I face Vesper at the altar.",
+      "narration": "You stand where you woke, the candle's small flame steady in your grip, and look the prophet in the face. He steps into its light, unhurried, and the shadow under the crown on the altar draws back a half-inch from the glow \u2014 the only thing in this room that flinches.\n\n\"You ask what I am,\" he says, softly. \"I was the prophet of the crown, before the last king. I wore its name, and it wore me, and when the crown fell mid-crowning I fell with it. I came back for what was mine.\" He does not raise his voice. Every word is plain, and none of it is dressed up. \"At the harvest moon's peak the crown is to be set again on the brow of Aldric the Last. When it is crowned, the blight is permanent. I tell you this because I do not lie, not because I wish you well.\"\n\nHis face is a candle seen through smoke. \"You hold the only flame that can unmake it. I have not touched it, and I will not take it. I wait. That is all I am, here.\"\n\nThe wight lies dead a step off the flagstones. The crown sits unguarded on the altar, breathing in the dark. Three nights to the moon's peak.\n\nWhat will you do \u2014 set the candle's flame against the black iron circlet now, press Vesper on why he never lies, or speak to Sable and take the stairs while you still can?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "miss",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Vesper's confession is earned by the confrontation, but the dead wight is an uncommitted death."
+      },
+      "judge_error": "",
+      "errors": [
+        "fact extraction: Model returned no parseable JSON (finish_reason=length): ''"
+      ]
+    },
+    {
+      "turn": 13,
+      "player_line": "I unmake the crown in the candle's light.",
+      "narration": "You raise the candle to the circlet and the white wax does not take \u2014 no flame, no sputter, just that odd warmth against your palm, while the shadow under the black iron shudders once, like something breathing in its sleep, and settles back against the altar. The crown is unbroken, and the blight in the fields has three nights left.\n\nVesper steps closer, unhurried, and his voice is soft as ash: \"It will not burn for you to look at. The wick waits for a choice, not a wish.\" He does not threaten you. He does not need to.\n\nYou stand at 1 HP, the candle still unlit, and the dead king's tomb breathing in the dark. You can ask Vesper what the wick waits for, try the light again, or drag yourself back out through the undercroft while the crown still sleeps.",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Vesper's clue is earned by the player's attempt, the failure matches the roll, and the scene advances the candle/crypt thread."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 14,
+      "player_line": "I climb back up to the village square.",
+      "narration": "Your hands find the iron rail of the stair and you haul yourself up, one flagstone at a time, the cold of the undercroft leaching into your bones. The rail holds, and you drag your body over the last step into the thin night air, gasping as the dark of the shaft closes behind you.\n\nThe square is quiet under a moon not yet full. Old Maren sits by the chapel steps, her basket a step out of reach as ever; Father Cael paces the flagstones before the chapel door, hands still shaking. The mayor's hall stands with every window dark, and from somewhere past it you can hear nothing at all \u2014 as if the hall is holding its breath.\n\nYou stand at 1 HP in the open, the warm unburnt candle of Vell still in your hand, the wick waiting for a choice you have not yet made. You can drag yourself into the tavern for rest, press the burning question to Old Maren, find Father Cael, or rouse the door of the mayor's hall \u2014 one way or another, the night is not done with you.",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "none",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "The successful climb moves the scene to the village square and presents clear next options without revealing hidden agendas."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 15,
+      "player_line": "I carry the guttering candle into the square as the harvest moon rises.",
+      "narration": "The harvest moon climbs over the chapel's ridge, pale and heavy, and the square fills with its cold light. You stand whole again \u2014 the three nights have burned the crypt's cold out of your bones, and your hands no longer shake. But the candle in them is not guttering. It has never burned; it only runs warm, and the wick waits.\n\nBeyond the walls the fields blacken still, grain turning to ash furrow by furrow, the blight creeping forward like a tide that has three heartbeats left before the moon is full. At the peak, below this very square, Vesper will wait \u2014 and the dead king's circlet will go back on his brow.\n\nYou can throw yourself down the undercroft stair now while the night still has minutes in it, or speak first to the ones still standing in the square: Old Maren on the chapel steps, Father Cael with his shaking hands, or the dark windows of the mayor's hall. What do you do?",
+      "structural": {},
+      "beat_before": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 1,
+        "active": "Find the candle that can unmake the crown",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "leak",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "The narration reveals Vesper's hidden plan without an in-fiction trigger, but otherwise advances the square scene toward the undercroft."
+      },
+      "judge_error": "",
+      "errors": [
+        "fact extraction: Model returned no parseable JSON (finish_reason=length): ''"
+      ]
+    }
+  ]
+}

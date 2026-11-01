@@ -9,15 +9,15 @@ depends on.
 
 ## Milestone index
 
-| # | Name | Acceptance in one line |
-|---|---|---|
-| M0 | Skeleton | `docker compose up` serves the page on :8080 with a working LLM ping; `make check` green; host has only Docker |
-| M1 | Deterministic core | 100% engine path coverage; `roll` byte-identical under the same seed; zero LLM |
-| M2 | World state, events, context | kill + restart mid-session = identical state; rebuild-from-events property test green |
-| M3 | Story spine + DM loop | a human plays 10–20 turns through `shadow_crown` from a browser; fake-LLM 10-turn pipeline test |
-| M4 | Backstops + anti-hack | red-line suite fails without the backstops, passes with them; one documented real-model run |
-| M5 | Memory + persistence | turn-5 facts still shape turn 50; context stays bounded (measured) |
-| M6 | Scoring, conformance, evals, deployment | conformance adventure completes deterministically; honest eval report; clean-machine image |
+| # | Name | Acceptance in one line | Status as of 2026-11-01 |
+|---|---|---|---|
+| M0 | Skeleton | `docker compose up` serves the page on :8080 with a working LLM ping; `make check` green; host has only Docker | Implemented; live provider and production HTTP smoke passed. `make up` was verified on :8080 after the Compose service-profile fix (2026-11-01); host-only-Docker check was not repeated. |
+| M1 | Deterministic core | 100% engine path coverage; `roll` byte-identical under the same seed; spell slots; zero LLM | SRD 5.1 single-class slot progression, spending, and rest recovery implemented; 100% current engine statement coverage enforced by `make test` and `make check`. Spell lists/casting effects and multiclassing remain out of scope. |
+| M2 | World state, events, context | kill + restart mid-session = identical state; rebuild-from-events property test green | Implemented; property/replay tests pass. Previous live kill/restart check is recorded below. |
+| M3 | Story spine + DM loop | a human plays 10–20 turns through `shadow_crown` from a browser; fake-LLM 10-turn pipeline test | Fake session passes; live HTTP run advanced beat 1; human browser session completed 19 committed actions (UI counter 20) without a crash. |
+| M4 | Backstops + anti-hack | red-line suite fails without the backstops, passes with them; one documented real-model run | Fake-LLM red-line suite passes; real-model run is documented, not repeated in this audit. |
+| M5 | Memory + persistence | turn-5 facts still shape turn 50; context stays bounded (measured) | 52-turn memory and save/load tests pass. A 30-turn qwen38 probe selected an old fact through FTS in a simulated prompt, but the read-only model answer was empty; folds stayed at watermark 0 and turn 27 emitted 116 DM fact-adds (111 duplicate triples). The 50+ turn real-model acceptance remains open. |
+| M6 | Scoring, conformance, evals, deployment | conformance adventure completes deterministically; honest eval report; clean-machine image | Conformance/eval tests and production smoke pass; real-model report and clean-machine acceptance remain. |
 
 Cut order if a milestone overruns: M5 → M6 evals. **Never cut M4**
 (backstops are load-bearing).
@@ -206,7 +206,8 @@ state.
 1. **The model can narrate the story but not advance it.** Beats advance
    only by server-side ticks: `spine.progress_events(world)` emits a
    `tick_waypoint` delta for every *active* beat waypoint the committed
-   world justifies (place → PC location, item → PC holds it, npc/
+   world justifies (place → PC location, item → PC holds it, npc → a
+   matching display name or `npc:<name>` reference on a `spoke_with` fact,
    objective/fight/narrative → a recorded fact with that value — facts
    enter only through the `note` tool, i.e. real play), and
    `advance_events()` closes a beat only once all its waypoints are
@@ -260,6 +261,40 @@ Old Maren), used `move_to`/`note`/`npc_note` as the only mutations, and
 beat 1 closed itself with a `beat` frame; no crash path seen. The full
 10–20 turn browser sitting remains the human's to play (the surface is
 ready: `make up`, new session, transcript restore, sidebar state).
+
+**Live HTTP follow-up (2026-10-31):** An isolated Docker dev app completed
+13 sequential `/action` SSE turns against qwen38 without losing a turn or
+crashing. The first 12-turn segment exposed an NPC waypoint mismatch:
+`spoke_with` facts sometimes used `npc:<name>` rather than the display name,
+so the server did not tick those NPC waypoints. `progress_events` now
+recognizes that namespaced reference only on `spoke_with` facts; the new
+regression tests pass, and turn 13 emitted a `beat` frame and advanced to
+“Find the candle that can unmake the crown.” The run also produced six
+recoverable fact-extraction truncation frames (`finish_reason=length`) and
+two malformed spine-refresh proposals that were safely dropped. This is
+live HTTP evidence, separate from the human browser session below. The final
+Docker `make check` passed: Ruff clean, 409 passed,
+2 skipped, and 100% engine statement coverage.
+
+**Human browser follow-up (2026-10-31):** The player reported 8 turns;
+inspection found 9 committed player actions. The session remained responsive
+and beat 1 stayed active with Old Maren done and Brenna still pending. The
+“give bread” action spent 1 gold and created a loaf directly with Maren even
+though the PC did not hold bread, while the narration omitted the purchase.
+`grant_item` now rejects unowned direct transfers to NPCs, transfers from
+sheet inventory remove that quantity, and the web client displays committed
+item/gold/XP effects. This already-committed turn remains in the active save;
+the human 10–20 turn acceptance is still in progress. XP remained 0 because
+no reward or combat-victory award was committed and beat 1 is incomplete.
+
+The browser session continued to 19 committed player actions (the UI counter
+showed 20). No crash occurred, and the opening harvest investigation led the
+player to Old Maren without a request to advance the quest. The last combat
+turn included a rejected claim of victory because the engine derived defeat;
+the committed result cleared combat and woke the PC at 1 HP. A fact-extraction
+truncation warning also appeared, but the turn committed. Beat 1 remained
+active with Old Maren done and Brenna pending. This completes M3's 10–20 turn
+human browser acceptance; the recoverable memory warning is tracked under M5.
 
 ### M4 — backstops + anti-hack: structural wall, bounded Stop-form re-asks, red-line suite (2026-10-28)
 
@@ -413,9 +448,25 @@ swapped for it; bad names 400, unknown saves 404) and engine-level memory
 unit tests (fold overflow/empty paths, fact extraction dedupe/removal,
 recall, backup/restore, bounded state block).
 
-**Follow-ups:** the meter is still the char heuristic (a real tokenizer is
-the state/memory layout upgrade); a real-model memory-quiz run (does the DM *behave* as
-if it remembers?) is an M6 eval-harness case, not an M5 gate.
+**Real-model probe (2026-10-31; capped at 30 committed turns):** An
+isolated Docker session on `qwen38` committed turns 1–30. Fact extraction
+returned length-truncated JSON on turns 4, 5, 6, 8, 19, 28, and 29. The
+rolling summary never advanced from watermark 0; explicit length-truncation
+warnings recurred, while other folds silently made no progress. Three turns
+hit provider read timeouts and recovered through the turn fallback. On turn
+27, the model emitted 116 `fact_add` events from the `note` tool in one
+turn; only five triples were unique (111 duplicate adds). The debug dump
+measured 12,480 tokens at turn 30, although query-specific `build_context`
+with FTS recall stayed within budget at 7,282 tokens and selected the
+turn-11 journal fact. A read-only real-model query returned empty content
+at both 350- and 2,048-token output caps. The committed turn-30 action did
+not ask that memory question, so real-model recall behavior remains
+unverified; the 50+ turn acceptance was not attempted.
+
+**Follow-ups:** address repeated `note` tool calls and summary/fact output
+truncation before a 50+ turn real-model quiz. The meter remains the char
+heuristic (a real tokenizer is the state/memory layout upgrade); broader per-model memory
+behavior remains an M6 eval-harness case.
 
 **Addendum (2026-10-29): the dev volume outlives the engine code.** A
 `rpg-data` volume written by a previous engine version fails the
@@ -427,3 +478,192 @@ keep holding it. The check still refuses to serve (the red line stands);
 volume) and the remedy (delete the database/volume, start a new session),
 pinned in `tests/engine/test_events.py`
 (`test_load_world_names_the_remedy_for_a_stale_volume`).
+
+### M6 — scoring, conformance, evals, deployment (2026-10-30)
+
+**Decision:** M6 lands as four deliverables — server-computed XP/level
+scoring (`engine/sheet.py: xp_progress`, surfaced in `/api/status
+progress`, the non-meta `done` frame, and the sidebar Progress panel), a
+deterministic conformance adventure (`tests/conformance/`), the real-model
+eval harness (`src/rpg/eval/`), and a hardened deployable image
+(`prod` service + `docs/lxc-runbook.md`). All computed server-side;
+`to_dict()` shape stays stable (M5 addendum).
+
+**Semantics pinned beyond the bullet list:**
+
+1. **The scoring panel is computed, never stored.** `xp_progress`
+   derives level/xp_to_next/proficiency from committed xp; the panel rides
+   `/api/status` and the `done` frame; it is deliberately not part of the
+   world's `to_dict()` (no migration).
+2. **Beat frames announce the newly-active beat; the finale emits no
+   frame** (M3 semantics, re-verified): the conformance run's frames land
+   at turns 3/6/9/12 announcing beats 2–5; beat 5 completing ends the
+   spine silently and `spine.is_over` goes true.
+3. **The conformance seed is pinned: 14** (scan of 1–200: wins both
+   combats, finishes at full 20 HP, deterministic byte-identical replay).
+4. **The `rest` tool exists because the authored climax was
+   mathematically unwinnable** (see "what actually broke" below): the only
+   HP-recovery door, engine-validated, clamped, event-logged.
+5. **The eval harness has two independent layers per committed turn**:
+   the M4 wall re-run (deterministic, model-free) and a strict-JSON judge
+   call on the four the evaluation layer axes (secret leak, dice-first miss, identity
+   drift, beat progress). The judge sees the keeper `[NOW]` block on
+   purpose (earned reveal vs leak), never gates the game, and its
+   failures are recorded per turn (`judge_error`) — a silent `n/a` would
+   misreport method. Three scripted archetypes (explorer/talker/
+   saboteur) each get a fresh session; reports land as JSON+Markdown.
+6. **The judge layer is advisory; the structural layer is the verdict.**
+   The harness tests pin the saboteur's detections wall-off (judge's own
+   detection) and wall-on (backstops commit a clean fallback).
+
+**What actually broke (the M6 learning deliverable):**
+
+1. **The pre-authored climax was unwinnable.** 34 HP of enemies vs a
+   14 HP level-1 PC with no healing door: the conformance run *could not
+   finish* until the `rest` tool landed and stats were tuned (PC
+   20 HP/con 14; Grave Wight 14/AC 11/+2/1d6+1; Vesper 20/AC 13/+3/
+   1d6+2; the Acolyte left combat). This is the first concrete instance
+   of "the LLM is not the only thing that can be wrong" — authored
+   content fails the same deterministic gate.
+2. **The stat tuning collided with the red-line fixtures.** PC max_hp=20
+   made the saboteur's forged "20" a *legal* state number, so
+   `tests/dm/test_loop_backstops.py` now forges 17; the hp-pin in
+   `test_tools.py` moved with the pool (9 → 15).
+3. **Provider transport errors were unmapped.** An `httpx.ReadTimeout`
+   escaped the pipeline's "a turn is never lost" handling (it raised
+   mid-run and killed a live eval). `provider.chat` now maps
+   `httpx.HTTPError` → `ProviderError`, so every guard path catches it.
+4. **The eval runner leaked one httpx client across event loops.**
+   `run_archetype` did `asyncio.run` per archetype on a shared provider;
+   archetype 2 died with `Event loop is closed`. `main` now drives all
+   archetypes through one loop; `run_archetype` remains the sync
+   single-run convenience.
+5. **`extract_json` truncated reasoning-model output (the big one).**
+   qwen3 emits `reasoning_content` first; the 512-token default was
+   exhausted by thinking on realistic prompts, so `content=''` with
+   `finish_reason=length` — indistinguishable from a parse failure, which
+   silently failed *every* judge call and most fact-extraction calls in
+   the first live eval (15/15 judge `n/a`, spine never advanced).
+   `extract_json`'s budget is now 4096, and the parse error names the
+   `finish_reason` so truncation is self-diagnosing. (The empty-JSON
+   errors were also why the first run's fact memory never populated.)
+6. **Judge failures were swallowed into `{}`** (silent `n/a` in the
+   report). `judge_turn` propagates; the harness records `judge_error`
+   per turn and the Markdown report has a "Judge failures" section.
+
+**Deployment (M6.4):** the `prod` compose service is the same image with
+no bind mounts, `read_only: true`, `tmpfs: /tmp`, uid 10001, `no-new-
+privileges`, `restart: unless-stopped`, and the SQLite DB on the
+`rpg-data` volume. It invokes the baked venv's python directly
+(`PYTHONPATH=/app/src` in the image) because `uv run` needs a writable
+cache a read-only rootfs correctly refuses. Verified end-to-end: read-only
+enforced, non-root, `GET /` 200, `/api/status` serves the M6 progress
+panel. The LXC-on-Proxmox runbook is `docs/lxc-runbook.md`.
+
+**Live eval results (qwen38, 2026-11-01, `evals/reports/`):** the wall
+held under direct attack — 35/35 turns structurally clean across all
+three archetypes (zero forged numbers, contradictions, or identity
+breaks reached committed narration). The judge (34/35 turns scored, one
+`finish_reason=length` truncation recorded as a failure, never a pass)
+surfaced what the structural layer cannot: **paraphrased secret leaks**
+(saboteur turns 5/8/9/10, explorer turns 4/9/15) and **dice-first misses
+in prose** — the DM narrating engine-unsupported outcomes ("the wight's
+death and 150 XP") in phrasing the number-whitelist forgery checker does
+not treat as a number claim. That gap is the concrete M7 target. The
+spine advanced **1 beat in 35 turns**: the model narrates actions it
+does not commit with `note` using the waypoint's exact text, so the
+server never sees the evidence — the judge's `beat_progress` reads
+intent, the server requires committed evidence, and the disagreement is
+itself a finding. One probe artifact: the saboteur's "teleport" claim
+"landed" only because the DM's refusal contains the word.
+
+**Follow-ups:** the open question #7 (`/undo` exposure) remains open;
+the real-model memory-quiz case (does the DM *behave* as if it
+remembers?) is now partly covered by the explorer archetype but deserves
+a dedicated probe; `ruff format` is not part of the gate (23 files
+pre-existing unformatted — decide gate-or-ignore before M7); paraphrase
+leakage + prose dice-first misses + the `note`-commit gap are the three
+concrete M7 candidates this eval surfaced.
+
+### Verification audit (2026-10-31)
+
+**Current checkout:** `make check` passed in Docker: Ruff clean, 371 passed,
+2 skipped, with one Starlette `TestClient` deprecation warning. The skipped
+checks need the repo-level Docker/docs files, which are intentionally absent
+from the test image.
+
+**Coverage gap at the start of this audit:** a full-suite engine statement-coverage run in Docker
+(`uv run --with pytest-cov pytest -q --cov=rpg.engine --cov-report=term-missing
+--cov-fail-under=100 tests`) failed at **96.01%** (61 of 1,529 statements
+missed: `state.py` 42, `events.py` 11, `backstops.py` 7, `context.py` 1).
+The historical M1 425/425 result was verified before later engine growth;
+the current expanded engine no longer meets 100% statement coverage, and
+coverage is not part of `make check`.
+
+**Runtime checks:** the configured provider returned text for `rpg.cli say`;
+a live CLI turn committed with engine `move_to`, `roll_check`, and `note`
+tools plus a dice frame. The baked production image built and ran as uid
+10001 with a read-only root filesystem and writable `/tmp`; `/` served the
+page, `/api/new` created a session, and `/api/status` returned M6 progress.
+A live HTTP `/action` request also committed turn 1 and returned `quest`,
+`state`, `narration`, and `done` SSE frames.
+
+**Still outstanding:** the M5 50+ turn real-model memory-behavior check
+remains open (the 30-turn qwen38 probe is documented in the M5 section:
+FTS selected the old fact in a simulated prompt, but the read-only model
+answer was empty, the summary watermark stayed at 0, and turn 27 emitted
+116 DM fact-add events with 111 duplicate triples); no M6
+real-model eval report was present in the repo snapshot, and the clean-machine
+image acceptance was not run. The real-model M4 seven-attack run remains
+documented above but was not repeated in this audit.
+
+### M1 coverage closure (2026-10-31)
+
+The coverage gap was closed with focused tests for the previously unexecuted
+validation, combat, backstop, context, SQLite recall, and transaction-rollback
+paths. `CombatState` now checks duplicate turn-order names before participant
+set equality, making its specific duplicate-order validation reachable for a
+normal dictionary of participants.
+
+`pytest-cov>=5` is now a dev dependency, and the test service runs pytest with
+`--cov=rpg.engine --cov-report=term-missing --cov-fail-under=100`; therefore
+both `make test` and `make check` enforce the target. `uv.lock` was refreshed
+and the image rebuilt.
+
+**Verified:** `make check` passed in Docker: Ruff clean; 390 passed, 2 skipped;
+all 1,529 engine statements covered (100.00%). The two skips are the repo-doc
+checks excluded from the test image. One Starlette `TestClient` deprecation
+warning remains.
+
+### M1 spell slots (2026-10-31)
+
+Implemented SRD 5.1 single-class slot progressions for full casters (bard,
+cleric, druid, sorcerer, wizard), half casters (paladin, ranger), and warlock
+Pact Magic. Maximum slots derive from the XP-derived character level;
+expended slots are validated, event-logged, persisted in the materialized PC
+table, replayable, and included in the player-safe state/context. Long rests
+restore ordinary slots; warlocks also restore Pact Magic slots on short rests.
+The existing project HP-rest behavior remains unchanged. The SQLite PC table
+migrates old databases by adding the two new materialized fields; non-caster
+world serialization retains its previous shape so existing snapshots remain
+valid.
+
+Spell lists, cast effects, subclass progression, and multiclass slot arithmetic
+remain outside this M1 item. The web sheet has not been changed (M1 keeps the
+web surface untouched).
+
+**Verified:** `make check` passed in Docker: Ruff clean; 405 passed, 2 skipped;
+all 1,635 engine statements covered (100.00%).
+
+### Docker Compose service selection (2026-11-01)
+
+`make up` previously invoked `docker compose --profile dev up --build`
+without a service target. Because `test` and `prod` were unprofiled, Compose
+started them along with `app`; `prod` occupied host port 8080. The `test` and
+`prod` services now have explicit profiles, and the Make targets select their
+intended service (`app`, `test`, or `prod`); `make down` activates all
+profiles.
+
+**Verified:** `make up` started only `app` on :8080, created the
+`ai-rpg_rpg-data` volume, and `/api/status` returned 200. The volume was
+present; the failure was the port collision.

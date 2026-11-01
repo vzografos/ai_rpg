@@ -60,6 +60,7 @@ def test_serves_the_static_page(monkeypatch: MonkeyPatch) -> None:
     assert 'id="action-form"' in body
     assert 'id="llm-status"' in body
     assert 'id="new-session"' in body
+    assert "f.event === 'tool'" in body
     # C2: single page, vanilla JS, no build step — no external script/css src.
     assert "script src=" not in body
     assert 'link rel="stylesheet" href="http' not in body
@@ -71,17 +72,26 @@ def test_status_reports_model_and_no_world(monkeypatch: MonkeyPatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["app"] == "ai_rpg"
-    assert body["milestone"] == "M5"
+    assert body["milestone"] == "M6"
     assert body["model"] == "test-model"
     assert body["base_url"] == "fake://test"
     assert body["world"] is False
+    assert body["progress"] is None  # no sheet yet (M6: the progress panel)
 
 
-def test_status_reports_the_world_after_a_session(monkeypatch: MonkeyPatch) -> None:
+def test_status_reports_the_scoring_panel_after_a_session(monkeypatch: MonkeyPatch) -> None:
     with web_client(monkeypatch, FakeProvider()) as c:
         start_session(c)
         body = c.get("/api/status").json()
     assert body["world"] is True
+    # The M6 scoring panel: XP/level + the next-level cost, derived from the sheet.
+    progress = body["progress"]
+    assert progress["level"] == 1
+    assert progress["xp"] == 0
+    assert progress["next_level_xp"] == 300  # SRD 5.1 XP table
+    assert progress["xp_to_next"] == 300
+    assert progress["hp"] == 20
+    assert progress["max_hp"] == 20
 
 
 def test_ping_round_trip_reports_hello(monkeypatch: MonkeyPatch) -> None:
@@ -181,6 +191,32 @@ def test_action_runs_the_turn_pipeline(monkeypatch: MonkeyPatch) -> None:
     assert any(m["role"] == "user" and "ask Brenna" in m["content"] for m in messages)
     assert any(m["role"] == "narration" and "Brenna studies you" in m["content"] for m in messages)
     assert last["turn"] == 1
+
+
+def test_done_frame_carries_the_scoring_panel_after_an_award(monkeypatch: MonkeyPatch) -> None:
+    """M6: the sidebar progress panel updates on the turn that awards XP."""
+    fake = FakeProvider(
+        scripted=[
+            tool_call_response("call-1", "award", {"xp": 400}),
+            text_response("The old debt feels lighter. You gain 400 XP (total 400, level 2)."),
+        ]
+    )
+    with web_client(monkeypatch, fake) as c:
+        start_session(c)
+        response = c.post("/action", json={"text": "I finish the day's work."})
+    frames = parse_sse(response.text)
+    effect = json.loads(frames["tool"][0])
+    assert effect["name"] == "award"
+    assert effect["lines"] == ["You gain 400 XP (total 400, level 2)."]
+    done = json.loads(frames["done"][0])
+    assert done["progress"]["level"] == 2  # 400 XP crosses the 300-XP boundary
+    assert done["progress"]["xp"] == 400
+    assert done["progress"]["next_level_xp"] == 900
+    assert done["progress"]["xp_to_next"] == 500
+    # And the same panel is the /api/status surface (roadmap M6: XP in /status).
+    status = c.get("/api/status").json()
+    assert status["progress"]["level"] == 2
+    assert status["progress"]["xp_to_next"] == 500
 
 
 def test_action_meta_command_needs_no_llm(monkeypatch: MonkeyPatch) -> None:

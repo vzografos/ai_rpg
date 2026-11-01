@@ -120,6 +120,10 @@ def _state_numbers(world: WorldState) -> set[int]:
             (sheet.hp, sheet.max_hp, sheet.gold, sheet.xp, sheet.level, sheet.ac, sheet.proficiency)
         )
         numbers.update(sheet.inventory.values())
+        if sheet.spellcasting_class is not None:
+            numbers.update(sheet.spell_slots)
+            numbers.update(sheet.spell_slots.values())
+            numbers.update(sheet.max_spell_slots.values())
     for item in world.items.values():
         numbers.add(item.quantity)
     if world.combat is not None:

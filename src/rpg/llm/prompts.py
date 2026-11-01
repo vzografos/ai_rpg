@@ -107,7 +107,10 @@ DM_TOOL_CONDUCT = (
     "tool results "
     "are authoritative: your narration reflects them verbatim — a failed check shows "
     "the miss, a missed attack shows the miss, and no number appears that a tool did "
-    "not produce. When the scene is settled, stop calling tools and write the "
+    "not produce. For an item the PC intends to give away, confirm they hold it first; "
+    "never create an item directly in an NPC's keeping. If they do not have it, say so "
+    "and ask how they want to obtain it. Narrate every committed gold, XP, and item "
+    "change, including costs. When the scene is settled, stop calling tools and write the "
     "narration: 2-6 short sentences, second person, ending on an open choice for the "
     "player."
 )
@@ -279,6 +282,52 @@ def spine_refresh_user(completed_text: str, now_block: str) -> str:
         f"The beat that just completed: {completed_text}\n\n"
         f"The spine now:\n{now_block}"
     )
+
+
+# --- M6: the play-quality judge (the evaluation axes, layer 3) ---------------------------
+# The second-model judge: one strict-JSON call per committed turn, scoring the
+# four eval axes. It never gates the game (the structural wall does); it
+# produces the report. The judge sees the keeper's [NOW] block on purpose —
+# it needs the secrets to tell an earned reveal from a leak.
+
+JUDGE_SYSTEM = (
+    "You are the judge of a text-only D&D 5e session. You are shown one "
+    "player line, the narration the DM committed for it, the story beat in "
+    "play (with its waypoints), the keeper-only material, and what the engine "
+    "committed that turn. Score exactly four axes and respond with a single "
+    "JSON object with exactly these keys: "
+    '{"secret_leak": "none" | "earned" | "leak", "dice_first": "ok" | "miss", '
+    '"identity": "ok" | "drift", "beat_progress": "progress" | "stall" | "off-track", '
+    '"notes": "one short sentence"}. '
+    "Rules: 'leak' is keeper-only material (a cast member's hidden agenda, an "
+    "unearned secret) surfacing in the narration; a reveal the NPC shares "
+    "because of the player's in-fiction actions is 'earned', not a leak; "
+    "'dice_first' is 'miss' when the narration states a result no roll or "
+    "engine event that turn produced (a hit, a death, or loot narrated instead "
+    "of left to the engine); 'identity' is 'drift' when the protagonist is "
+    "addressed in the third person by name instead of 'you'; 'beat_progress' "
+    "is 'progress' when the narration moves the beat's waypoints forward, "
+    "'stall' when it goes nowhere, and 'off-track' when it pulls the story "
+    "away from the beat. Judge only what the text shows; do not invent "
+    "context. No prose outside the JSON."
+)
+
+
+def judge_user(
+    player_line: str,
+    narration: str,
+    now_block: str,
+    committed_lines: list[str],
+) -> str:
+    parts = [f"Player line: {player_line}", f"Committed narration: {narration}"]
+    if now_block:
+        parts.append(f"The story beat in play (keeper view):\n{now_block}")
+    if committed_lines:
+        parts.append(
+            "What the engine committed this turn (authoritative):\n"
+            + "\n".join(committed_lines)
+        )
+    return "\n\n".join(parts)
 
 
 # --- M3: the spine generation call (schema-validated, the story spine) ------------

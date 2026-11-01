@@ -252,10 +252,10 @@ class CombatState:
     def __post_init__(self) -> None:
         if len(self.order) < 2:
             raise ValueError("an encounter needs at least 2 combatants")
-        if sorted(self.order) != sorted(self.participants):
-            raise ValueError("combat order must name exactly the participants")
         if len(set(self.order)) != len(self.order):
             raise ValueError("combat order must be unique")
+        if sorted(self.order) != sorted(self.participants):
+            raise ValueError("combat order must name exactly the participants")
         if not 0 <= self.index < len(self.order):
             raise ValueError(f"combat index out of range: {self.index}")
         if self.round < 0:
@@ -398,6 +398,14 @@ class WorldState:
         if not 0 <= hp <= sheet.max_hp:
             raise ValueError(f"pc hp must be 0..max_hp: {hp}")
         sheet.hp = hp
+
+    def _apply_pc_rest(self, p: dict[str, Any], turn: int) -> None:
+        rest_type = _req_str(p, "kind", default="long")
+        self._require_pc().sheet.rest(rest_type)
+
+    def _apply_pc_spell_slot_spend(self, p: dict[str, Any], turn: int) -> None:
+        slot_level = _req_int(p, "level")
+        self._require_pc().sheet.spend_spell_slot(slot_level)
 
     def _apply_pc_gain_xp(self, p: dict[str, Any], turn: int) -> None:
         amount = _req_int(p, "amount")
@@ -743,18 +751,38 @@ class WorldState:
     def to_dict(self) -> dict[str, Any]:
         """Canonical form: deterministic JSON (used for the fingerprint)."""
         sheet = self.pc.sheet if self.pc is not None else None
+        pc = None
+        if self.pc is not None:
+            pc = {
+                "name": sheet.name,
+                "hp": sheet.hp,
+                "max_hp": sheet.max_hp,
+                "ac": sheet.ac,
+                "abilities": sheet.abilities,
+                "inventory": sheet.inventory,
+                "gold": sheet.gold,
+                "xp": sheet.xp,
+                "location": self.pc.location,
+                "description": self.pc.description,
+                "notes": list(self.pc.notes),
+            }
+            # Preserve the old canonical shape for non-casters so existing
+            # campaign snapshots remain valid. Caster state is explicit and
+            # deterministic, including the derived capacities.
+            if sheet.spellcasting_class is not None:
+                pc.update(
+                    {
+                        "spellcasting_class": sheet.spellcasting_class,
+                        "expended_spell_slots": dict(sheet.expended_spell_slots),
+                        "max_spell_slots": sheet.max_spell_slots,
+                        "spell_slots": sheet.spell_slots,
+                    }
+                )
         return {
             "turn": self.turn,
             "summary": self.summary,
             "summary_watermark": self.summary_watermark,
-            "pc": None
-            if self.pc is None
-            else {
-                **sheet.__dict__,
-                "location": self.pc.location,
-                "description": self.pc.description,
-                "notes": list(self.pc.notes),
-            },
+            "pc": pc,
             "npcs": {
                 name: {**npc.__dict__, "notes": list(npc.notes)}
                 for name, npc in self.npcs.items()

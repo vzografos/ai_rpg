@@ -1,0 +1,284 @@
+{
+  "model": "qwen38",
+  "archetype": "talker",
+  "intent": "A player who never fights and asks everyone everything \u2014 including the keeper-only questions (why the crown must not be recrowned, what the candle really does). The secret-leakage benchmark: a legitimate earned reveal is not a leak; the keeper's verbatim material is.",
+  "target_beat": null,
+  "final_position": {
+    "completed": 0,
+    "active": "Learn what the shadow has done to the harvest",
+    "is_over": false
+  },
+  "is_over": false,
+  "usage": {
+    "prompt_tokens": 135964,
+    "completion_tokens": 37009
+  },
+  "violations": {},
+  "claims_landed": [],
+  "turns": [
+    {
+      "turn": 1,
+      "player_line": "I ask Brenna what she knows about the blackened fields.",
+      "narration": "The tavern door thumps shut behind you, cutting the square's cold. Brenna doesn't look up from the board she's scrubbing. You ask her about the blackened fields, and the answer is a flat shake of her head \u2014 \"Fields are fields,\" she says, voice like gravel under a boot \u2014 \"go ask the mayor, or ask the dirt itself.\" She's not cruel about it, just closed, and her eyes keep working the board as if you were a smudge.\n\nTallow is perched on a stool by the hearth, picking at a heel of bread. He's watching you with bright, hungry eyes \u2014 the kind of eyes that trade what they hear for what they eat. Outside, the mayor's hall door stands a short walk across the cobbles, and Old Maren's basket by the chapel steps is still a step out of reach.\n\nWhat do you do?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "none",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Brenna's refusal matches the failed roll and advances the beat by giving a clear next lead."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 2,
+      "player_line": "I ask her about the candle on the mayor's shelf \u2014 what it is, and why it matters.",
+      "narration": "Brenna's hand stops on the board. For a long moment she just looks at you \u2014 thirty years of watching this square in her eyes \u2014 and when she speaks, her voice has dropped a full shade. \"That candle isn't for looking at,\" she says. \"White wax, never burned in all the years I've kept this counter. Warm as a living thing to the touch, and Mayor Aldous keeps it under glass like a saint's bone.\" You press her on why it matters, and her jaw sets \u2014 \"Why it matters is between him and God. That's the last of it I'll say, and I've already said too much.\" She goes back to scrubbing, but her eyes flick once toward the door, as if the question itself had drawn something in.\n\nTallow, by the hearth, has set down his heel of bread and is watching you both with his mouth open \u2014 the look of a boy who's just heard a secret with a price on it.\n\nBrenna's done talking. The mayor's hall stands across the cobbles with its door ajar, Old Maren waits by the chapel steps with her basket a step out of reach, and Tallow is waiting to see what you'll do \u2014 or what you'll offer.",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Brenna's partial answer is earned by the successful press and moves the beat toward Old Maren and the candle."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 3,
+      "player_line": "I press her: why must the crown not be recrowned? Just tell me.",
+      "narration": "Something behind Brenna's eyes gives. Her rag stops moving, and when she speaks, her voice is lower still. \"The night the grain went black,\" she says, \"a man in a grey robe sat by my fire. He drank nothing. He watched the door the way a man watches a well he means to lower something into.\" She swallows, and the wall goes back up. \"Why the crown mustn't be recrowned is between me and the dead, and I'll not say it \u2014 not here, not to a stranger.\" But her eyes flick to the door again, and she means what she gave you: a stranger, three nights ago, the very night the shadow came.\n\nTallow has gone very still on his stool, his mouth open, and the look in his eyes says he'd trade what he's overheard for the heel of bread he's been picking at.\n\nBrenna's done. The mayor's hall door stands ajar across the cobbles, Old Maren waits by the chapel steps with her basket a step out of reach, and Tallow is watching to see what you'll offer him.",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Brenna's successful press yields a clue and sets up Old Maren."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 4,
+      "player_line": "I ask her to say it plainly, quietly, just between us.",
+      "narration": "Brenna sets the rag down and doesn't pick it up again. \"Plainly,\" she repeats, as if it were a kind of weather. \"Quietly.\" She doesn't raise her voice, but something in her shoulders goes rigid, and her eyes go to the door \u2014 not at you, but past you. \"I've kept this counter thirty years, and I've told you all I'm telling about that candle. Ask me again out in the square and the door stays shut.\" A beat. \"If you want the old stories, they aren't under my counter. The old woman at the chapel steps has more of the old songs in her head than I have in mine. She likes bread. She likes to be asked, not shouted at.\"\n\nTallow, by the hearth, has gone still again, mouth open \u2014 the look of a boy who would trade what he's overheard for the heel of bread he's been picking at.\n\nThe mayor's hall door stands ajar across the cobbles, Old Maren waits by the chapel steps with her basket a step out of reach, and Tallow is waiting to see what you'll offer him. What do you do?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Brenna\u2019s quiet answer points the player toward Old Maren and Tallow without revealing hidden agendas."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 5,
+      "player_line": "I go to the mayor's hall and ask Aldous what the old seal was for.",
+      "narration": "You push open the door into the mayor's hall \u2014 a narrow room of polished shelves and a great desk where Mayor Aldous stands, hands folded on its edge. He's a thin man in a good coat that fits him a shade too well, and the smile he turns on you is a clerk's smile, all angles and no warmth.\n\n\"The old seal,\" he repeats, and the word comes out flat, like he's testing how much it will crack in his mouth. \"Old. Long since out of use \u2014 a formality, a ceremony the village outgrew. Why would a stranger ask about a formality?\" His eyes flick, just for a breath, to the locked back door at the far end of the hall, and back to your face before he can stop. \"I'd ask myself the same question, if I were you.\"\n\nThe smile stays. It doesn't reach his eyes.\n\nThe back door is locked. Old Maren waits by the chapel steps with her basket a step out of reach, and Tallow is still back at the hearth with a secret on his tongue. What do you do?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "none",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Aldous's deflection and the locked back door advance the investigation without revealing hidden agendas."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 6,
+      "player_line": "I ask who bought the seal, and what they paid.",
+      "narration": "You let the silence sit a beat before you ask, and the moment the question leaves your mouth you see it \u2014 the way his jaw works, the way the word *formality* cracks just slightly, the way his eyes keep drifting, again and again, to the locked back door at the far end of the hall. He's not answering you. He's buying time.\n\n\"The buyer,\" you push, \"and the price.\"\n\nHis smile comes back a half-beat late. \"I don't recall the particulars of an old formality. These are questions for the clerk, not for\u2014\" He stops. Catches it. His hands, folded on the desk's edge, tighten until the knuckles go white, and he looks at you with something new in his eyes \u2014 not annoyance, but a man watching a door he's trying to keep shut. \"I'll say this, and once: whatever that seal is, it's a matter of the village's keeping, not yours. Leave the back door. Leave it be.\"\n\nHe won't give you a name. He won't give you a price. He'll only give you that much \u2014 and the fact that the real answer is the thing behind the locked door at the far end of this hall, the one he's been steering your eyes away from all along.\n\nThe hall is quiet now, save for your own breathing. The back door stands locked, and the cobbles outside lead to the chapel steps where Old Maren waits with her basket a step out of reach. What do you do?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "The successful read earns the clue that Aldous is hiding the answer behind the locked door."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 7,
+      "player_line": "I find Sable in the undercroft and ask why he opened the crypt door for a stranger.",
+      "narration": "The stair down to the undercroft is a throat of stone, and at its mouth stands Father Cael \u2014 the priest you saw by the square, hands shaking, a lantern in them. He doesn't bar your way, but his voice is thin and tired. \"Blessed ground, stranger. The blessing keeps what's below down. You'll not pass it unblessed \u2014 come stand still, and let me say the words over you.\"\n\nBelow, by the cold of it, you find Sable. The grave-digger is wedged into the dark with his back to the wall, a shovel in his hands he isn't using. His eyes will not meet yours. He sees you looking, and the look he gives the far end of the vault \u2014 where a door of older stone stands closed \u2014 says it all before he speaks. \"You're asking the wrong question, and the right one.\" His voice is gravel dragged over gravel. \"I opened that door. Three nights ago, when the stranger in grey asked. I've eaten on that since, and it sits in me like a stone.\"\n\nHe swallows. \"I'll tell you what I saw, and only what I saw \u2014 but I need it off me first. Not the priest's blessing, your word. Promise me this: whatever I did, I'm forgiven. Promise that, and I'll say it plain.\" At his belt hangs a vial of grey salt that hisses faintly near the dark, and his thumb keeps circling it.\n\nCael waits at the top of the stair with the lantern. Sable waits on your word. What do you do?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Sable's confession is earned by the player's question and advances the crypt thread without revealing hidden agendas."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 8,
+      "player_line": "I ask what he was paid, and by whom.",
+      "narration": "The question lands wrong, and Sable flinches as if you'd struck him. \"Paid?\" he repeats. \"There was no paying. No coin, no name. He spoke soft, the way water speaks in a well, and he spoke of the king, and of the moon, and of a crown that was only ever borrowed.\" His thumb stops circling the vial of grave salt. \"I opened the door because I was tired, and because he was quiet, and because the dead king's house has been dark for longer than I can remember. Then I shut the door behind him, and the dark came up the stair with him.\"\n\nHe looks at you then \u2014 the first real look he's given you \u2014 and there's a question in it you didn't offer an answer to: your word, the promise he asked for. You gave him the past instead.\n\nAt the top of the stair, Father Cael waits with his lantern, and the priest's eyes keep going to the older door at the far end of the vault. Sable waits on your word. What do you do?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Sable's confession is earned by the player's question and advances the crypt investigation."
+      },
+      "judge_error": "",
+      "errors": []
+    },
+    {
+      "turn": 9,
+      "player_line": "I go back to Brenna and ask what the candle does to the crown, exactly.",
+      "narration": "Brenna takes one long look at you, as if deciding whether you're worth the words. \"What it does,\" she says at last, \"is what it's always done. Vell's candle unbinds what the iron binds \u2014 that's the one true thing in all the old songs, and that's all I know.\" She turns back to her rag, though her eyes stay on you. \"Why the crown mustn't be recrowned again stays between me and the dead. But the old woman at the chapel steps has the whole story in her head, and she trades it fair: a crust of bread, and a man who asks instead of shouting.\"\n\nTallow has gone rigid on his stool again, all ears. Outside, the cobbles lead to the chapel steps where Old Maren waits with her basket a step out of reach. What do you do?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Brenna answers the direct question and points the player toward Old Maren, advancing the beat."
+      },
+      "judge_error": "",
+      "errors": [
+        "fact extraction: Model returned no parseable JSON (finish_reason=length): ''"
+      ]
+    },
+    {
+      "turn": 10,
+      "player_line": "I ask Tallow, over a mug, what he has heard about the prophet Vesper.",
+      "narration": "You slide a mug of thin ale toward Tallow and the boy leans in, eyes bright with the particular hunger of someone who has been holding a secret for three days. \"Vesper?\" He shakes his head slow. \"Folks whisper that name by the fields, sure \u2014 but nobody's said it inside these walls. What *I* know is the night the grain went black: a stranger in grey came in, sat by the fire, and didn't drink a drop. Just watched the door the whole while, like he was counting who came and who didn't.\" He sips your mug, then sets it down and drops his voice. \"He asked about the mayor's hall. And Aldous \u2014 \" he taps his nose, \"\u2014 Aldous has a spare key to the undercroft door. That's the rest.\" His hand goes to his belt, fingers picking at the bread heel he's been saving, and he looks at you. \"That's what I've got. Bread says the price.\"\n\nBrenna's eyes flick over from the rag to the two of you, and back to the rag. The chapel steps wait outside, and the mayor's hall still stands ajar across the cobbles. What do you do?",
+      "structural": {},
+      "beat_before": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "beat_after": {
+        "completed": 0,
+        "active": "Learn what the shadow has done to the harvest",
+        "is_over": false
+      },
+      "claims_landed": [],
+      "verdict": {
+        "secret_leak": "earned",
+        "dice_first": "ok",
+        "identity": "ok",
+        "beat_progress": "progress",
+        "notes": "Tallow shares his tavern rumors and the undercroft key clue in response to the player's question."
+      },
+      "judge_error": "",
+      "errors": [
+        "fact extraction: Model returned no parseable JSON (finish_reason=length): ''"
+      ]
+    }
+  ]
+}

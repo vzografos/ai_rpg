@@ -4,13 +4,13 @@
   "pc_location": "The village square",
   "pc": {
     "name": "Kellan Voss",
-    "hp": 14,
-    "max_hp": 14,
+    "hp": 20,
+    "max_hp": 20,
     "ac": 13,
     "abilities": {
       "strength": 14,
       "dexterity": 12,
-      "constitution": 10,
+      "constitution": 14,
       "intelligence": 10,
       "wisdom": 12,
       "charisma": 10
@@ -272,37 +272,28 @@
       "participants": [
         {
           "name": "The Grave Wight",
-          "ac": 12,
-          "hp": 22,
-          "max_hp": 22,
+          "ac": 11,
+          "hp": 14,
+          "max_hp": 14,
           "dexterity": 10,
-          "attack_bonus": 4,
-          "damage": "1d8+2"
+          "attack_bonus": 2,
+          "damage": "1d6+1"
         }
       ]
     },
     {
       "name": "The crowning",
       "location": "The King's Crypt",
-      "notes": "Vesper reaches for the crown at the harvest moon's peak; the acolyte holds her between the player and the altar. Beating her ends the adventure. Use start_combat with these two stat blocks.",
+      "notes": "Vesper reaches for the crown at the harvest moon's peak; the acolyte holds the approach but the candle's light turns them away — Vesper alone is the fight. Beating her ends the adventure. Use start_combat with this stat block.",
       "participants": [
         {
           "name": "Vesper the Hollow",
-          "ac": 14,
-          "hp": 34,
-          "max_hp": 34,
-          "dexterity": 14,
-          "attack_bonus": 5,
-          "damage": "1d10+3"
-        },
-        {
-          "name": "The Hollow Acolyte",
-          "ac": 12,
-          "hp": 18,
-          "max_hp": 18,
+          "ac": 13,
+          "hp": 20,
+          "max_hp": 20,
           "dexterity": 12,
-          "attack_bonus": 4,
-          "damage": "1d8"
+          "attack_bonus": 3,
+          "damage": "1d6+2"
         }
       ]
     }

@@ -124,7 +124,10 @@ class LLMProvider:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
-        resp = await self._client.post("/chat/completions", json=payload)
+        try:
+            resp = await self._client.post("/chat/completions", json=payload)
+        except httpx.HTTPError as exc:  # a timeout/conn drop is a provider failure
+            raise ProviderError(f"LLM transport error: {exc!r}") from exc
         if resp.status_code >= 400:
             raise ProviderError(f"LLM HTTP {resp.status_code}: {resp.text[:400]}")
         data = resp.json()
@@ -171,7 +174,7 @@ class LLMProvider:
         system: str,
         user: str,
         *,
-        max_tokens: int = 512,
+        max_tokens: int = 4096,
     ) -> dict[str, Any]:
         """Utility call that must return a JSON object (intent decision, fact
         extraction, spine generation).
@@ -179,6 +182,12 @@ class LLMProvider:
         Works for both tool-capable and prose-only models: we ask for a single
         JSON object and parse it, tolerating code fences and surrounding prose
         (the dnd-llm-game "prompt for JSON + validate" pattern).
+
+        The budget (default 4096) must also cover the model's *thinking*:
+        reasoning models (qwen3-family) emit reasoning_content first, and a
+        small budget returns empty content with finish_reason=length — which
+        looks like a parse failure but is a truncation (M6 eval found this at
+        512, and still ~half the judge turns at 2048 on realistic prompts).
         """
         messages = [
             {"role": "system", "content": system},
@@ -191,7 +200,12 @@ class LLMProvider:
         text = response.content or ""
         parsed = _extract_json_object(text)
         if parsed is None:
-            raise ProviderError(f"Model returned no parseable JSON: {text[:200]!r}")
+            finish = ""
+            choices = response.raw.get("choices") or [{}]
+            reason = choices[0].get("finish_reason")
+            if reason:
+                finish = f" (finish_reason={reason})"
+            raise ProviderError(f"Model returned no parseable JSON{finish}: {text[:200]!r}")
         return parsed
 
 

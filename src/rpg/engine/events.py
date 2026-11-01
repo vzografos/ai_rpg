@@ -60,7 +60,9 @@ EVENT_KINDS = frozenset(
         "pc_damage",
         "pc_heal",
         "pc_set_hp",
+        "pc_rest",
         "pc_gain_xp",
+        "pc_spell_slot_spend",
         "pc_gold",
         "pc_item_add",
         "pc_item_remove",
@@ -110,6 +112,8 @@ CREATE TABLE IF NOT EXISTS pc (
   inventory TEXT NOT NULL,
   gold INTEGER NOT NULL,
   xp INTEGER NOT NULL,
+  spellcasting_class TEXT NOT NULL DEFAULT '',
+  expended_spell_slots TEXT NOT NULL DEFAULT '{}',
   location TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '[]'
@@ -282,6 +286,19 @@ class WorldDB:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self.path, isolation_level=None)
         self._conn.executescript(_SCHEMA)
+        self._migrate_pc_spell_slots()
+
+    def _migrate_pc_spell_slots(self) -> None:
+        """Add the M1 slot columns to existing materialized PC tables."""
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(pc)")}
+        if "spellcasting_class" not in columns:
+            self._conn.execute(
+                "ALTER TABLE pc ADD COLUMN spellcasting_class TEXT NOT NULL DEFAULT ''"
+            )
+        if "expended_spell_slots" not in columns:
+            self._conn.execute(
+                "ALTER TABLE pc ADD COLUMN expended_spell_slots TEXT NOT NULL DEFAULT '{}'"
+            )
 
     def close(self) -> None:
         self._conn.close()
@@ -432,7 +449,7 @@ class WorldDB:
         world = WorldState()
         row = self._conn.execute(
             "SELECT name, hp, max_hp, ac, abilities, inventory, gold, xp, location, "
-            "description, notes FROM pc"
+            "description, notes, spellcasting_class, expended_spell_slots FROM pc"
         ).fetchone()
         if row is not None:
             world.pc = PlayerCharacter(
@@ -440,6 +457,8 @@ class WorldDB:
                     name=row[0], hp=row[1], max_hp=row[2], ac=row[3],
                     abilities=json.loads(row[4]), inventory=json.loads(row[5]),
                     gold=row[6], xp=row[7],
+                    spellcasting_class=row[11] or None,
+                    expended_spell_slots=json.loads(row[12]),
                 ),
                 location=row[8],
                 description=row[9],
@@ -538,13 +557,14 @@ class WorldDB:
             sheet = world.pc.sheet
             self._conn.execute(
                 "INSERT INTO pc (id, name, hp, max_hp, ac, abilities, inventory, "
-                "gold, xp, location, description, notes) "
-                "VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "gold, xp, spellcasting_class, expended_spell_slots, location, description, notes) "
+                "VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     sheet.name, sheet.hp, sheet.max_hp, sheet.ac,
                     json.dumps(dict(sheet.abilities), sort_keys=True),
                     json.dumps(dict(sheet.inventory), sort_keys=True),
-                    sheet.gold, sheet.xp,
+                    sheet.gold, sheet.xp, sheet.spellcasting_class or "",
+                    json.dumps(dict(sheet.expended_spell_slots), sort_keys=True),
                     world.pc.location, world.pc.description, json.dumps(world.pc.notes),
                 ),
             )

@@ -5,10 +5,14 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # Cache lives outside /app (the scanned workdir) and is owned by the runtime
-# user below, so the non-root process can write to it.
+# user below, so the non-root process can write to it. PYTHONPATH exposes the
+# source tree to the baked venv's interpreter directly (the project is an
+# editable install, so `python -m uvicorn` needs the src path; `uv run` adds
+# it implicitly, but uv wants a writable cache a read-only rootfs refuses).
 ENV UV_PROJECT_ENVIRONMENT=/app/.venv \
     UV_LINK_MODE=copy \
-    UV_CACHE_DIR=/cache/uv
+    UV_CACHE_DIR=/cache/uv \
+    PYTHONPATH=/app/src
 
 WORKDIR /app
 

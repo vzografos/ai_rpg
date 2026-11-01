@@ -193,6 +193,24 @@ def test_state_block_shows_the_playable_world():
     assert "Acting now: Mira" in block
 
 
+def test_state_block_shows_current_spell_slots_for_a_caster():
+    world = WorldState()
+    world.apply_event(
+        "world_init",
+        {"pc": {"name": "Mira", "spellcasting_class": "wizard"}},
+        turn=0,
+    )
+    world.apply_event("pc_spell_slot_spend", {"level": 1}, turn=1)
+
+    assert "Spell slots (wizard): level 1: 1/2" in state_block(world)
+
+
+def test_state_block_labels_an_item_without_a_holder_or_place():
+    world = make_world()
+    world.apply_event("item_add", {"name": "Unplaced token"}, turn=3)
+    assert "Item: Unplaced token (location unknown)" in state_block(world)
+
+
 def test_state_block_never_leaks_keeper_only_data():
     block = state_block(make_world())
     dump = dump_context(make_world())

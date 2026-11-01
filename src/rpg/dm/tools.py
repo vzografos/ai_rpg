@@ -229,11 +229,31 @@ DM_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "rest",
+            "description": (
+                "Rest the player character: a long rest fully restores HP and ordinary "
+                "spell slots; a short rest restores half the missing HP (rounded up), "
+                "and restores warlock Pact Magic slots. The engine validates and "
+                "records these changes; narration must reflect them verbatim."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["short", "long"], "default": "long"}
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "grant_item",
             "description": (
-                "Give an item to the PC ('pc') or an NPC ('npc:<name>'), or place it at a "
-                "location (no holder). holder and location are mutually exclusive. If the "
-                "item already exists in the world it moves; otherwise it is created."
+                "Grant a new item to the PC or place it at a location. To give an item to "
+                "an NPC, it must already exist and be held by the PC (or be in the PC's "
+                "character-sheet inventory); the transfer removes it from the PC. Never "
+                "create a new item directly in an NPC's keeping. If the item already "
+                "exists in the world, it moves to the requested holder/location."
             ),
             "parameters": {
                 "type": "object",
@@ -528,6 +548,9 @@ class ToolEngine:
         description = args.get("description", "")
         if not isinstance(description, str):
             raise ValueError("description must be a string")
+        pc_holder = f"pc:{_pc_name(self.world)}"
+        pc_inventory = self.world.pc.sheet.inventory
+        owned = pc_inventory.get(name, 0)
         existing = self.world.items.get(name)
         if existing is not None:
             if not holder:
@@ -536,14 +559,71 @@ class ToolEngine:
                 )
             if existing.holder == holder:
                 raise ValueError(f"the {name!r} is already with {holder}")
+            if existing.holder == pc_holder and owned:
+                raise ValueError(
+                    f"the {name!r} is represented both as a world item and in the PC's inventory"
+                )
+            if holder.startswith("npc:") and existing.holder != pc_holder:
+                raise ValueError(
+                    f"you cannot give the {name!r} to {holder}: it is not held by the PC"
+                )
+            if holder == pc_holder and owned:
+                raise ValueError(f"the {name!r} is already in the PC's character-sheet inventory")
+            previous_holder = existing.holder
+            previous_location = existing.location
             self._apply("item_set_holder", {"name": name, "holder": holder})
+            if holder.startswith("npc:"):
+                npc_name = holder[4:]
+                line = f"You give the {name} to {npc_name}."
+            elif holder == pc_holder and previous_holder.startswith("npc:"):
+                line = f"{previous_holder[4:]} hands you the {name}."
+            elif holder == pc_holder and previous_location:
+                line = f"You take the {name} from {previous_location}."
+            elif holder == pc_holder:
+                line = f"You receive the {name}."
+            else:
+                line = f"The {name} is now with {holder}."
             return ToolResult(
                 name="grant_item",
                 ok=True,
-                message=f"The {name} is now with {holder}.",
+                message=line,
+                authoritative=[line],
             )
         if not holder and not location:
             raise ValueError(f"grant_item needs a holder or a location: {name!r}")
+        if holder.startswith("npc:"):
+            if owned < quantity:
+                raise ValueError(
+                    f"cannot give {quantity}x {name!r} to {holder}: "
+                    f"the PC only has {owned} in their inventory"
+                )
+            self._apply("pc_item_remove", {"name": name, "quantity": quantity})
+            self._apply(
+                "item_add",
+                {
+                    "name": name,
+                    "holder": holder,
+                    "location": "",
+                    "quantity": quantity,
+                    "description": description,
+                },
+            )
+            npc_name = holder[4:]
+            line = f"You give {quantity} {name} to {npc_name}."
+            return ToolResult(
+                name="grant_item",
+                ok=True,
+                message=line,
+                authoritative=[line],
+            )
+        if owned and holder == pc_holder:
+            raise ValueError(f"the {name!r} is already in the PC's character-sheet inventory")
+        if owned and location:
+            if owned < quantity:
+                raise ValueError(
+                    f"cannot place {quantity}x {name!r}: the PC only has {owned}"
+                )
+            self._apply("pc_item_remove", {"name": name, "quantity": quantity})
         self._apply(
             "item_add",
             {
@@ -554,8 +634,18 @@ class ToolEngine:
                 "description": description,
             },
         )
-        where = f"with {holder}" if holder else f"at {location}"
-        return ToolResult(name="grant_item", ok=True, message=f"The {name} now lies {where}.")
+        if holder == pc_holder:
+            line = f"You receive the {name}."
+        elif location:
+            line = f"You place the {name} at {location}."
+        else:
+            line = f"The {name} is now with {holder}."
+        return ToolResult(
+            name="grant_item",
+            ok=True,
+            message=line,
+            authoritative=[line],
+        )
 
     def _tool_take_item(self, args: dict[str, Any]) -> ToolResult:
         name = args.get("name")
@@ -582,7 +672,10 @@ class ToolEngine:
                 if item.holder or item.location != holder:
                     raise ValueError(f"the {name!r} is {current}, not at {holder!r}")
         self._apply("item_set_holder", {"name": name, "holder": pc_holder})
-        return ToolResult(name="take_item", ok=True, message=f"You take the {name}.")
+        line = f"You take the {name}."
+        return ToolResult(
+            name="take_item", ok=True, message=line, authoritative=[line]
+        )
 
     # -- quests / notes ----------------------------------------------------------
 
@@ -673,6 +766,31 @@ class ToolEngine:
         return ToolResult(
             name="award", ok=True, message="Awarded.", authoritative=lines
         )
+
+    def _tool_rest(self, args: dict[str, Any]) -> ToolResult:
+        kind = args.get("kind", "long")
+        if kind not in ("short", "long"):
+            raise ValueError(f"kind must be short|long: {kind!r}")
+        sheet = self.world.pc.sheet
+        hp_before = sheet.hp
+        slots_before = sheet.spell_slots
+        if hp_before == sheet.max_hp and not sheet.can_restore_spell_slots(kind):
+            raise ValueError("already at full HP with no spell slots to recover — nothing to rest")
+        self._apply("pc_rest", {"kind": kind})
+        healed = sheet.hp - hp_before
+        restored = {
+            slot_level: sheet.spell_slots[slot_level] - slots_before[slot_level]
+            for slot_level in slots_before
+            if sheet.spell_slots[slot_level] > slots_before[slot_level]
+        }
+        line = f"You rest and recover {healed} HP (now {sheet.hp}/{sheet.max_hp})."
+        if restored:
+            slots = ", ".join(
+                f"{count} level {slot_level} spell slot{'s' if count != 1 else ''}"
+                for slot_level, count in sorted(restored.items())
+            )
+            line += f" You recover {slots}."
+        return ToolResult(name="rest", ok=True, message=line, authoritative=[line])
 
     # -- combat -------------------------------------------------------------------
 

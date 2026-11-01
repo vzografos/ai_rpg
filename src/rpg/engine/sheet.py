@@ -1,4 +1,4 @@
-"""Character sheet (roadmap M1): abilities -> derived stats, XP table.
+"""Character sheet (roadmap M1): derived stats, XP, and spell-slot tables.
 
 Derived stats (SRD 5.1):
 - ability modifier  = (score - 10) // 2         (scores 3..30)
@@ -13,13 +13,17 @@ The sheet is pure data: every mutation goes through a validated method
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 __all__ = [
     "ABILITIES",
+    "SPELLCASTING_CLASSES",
     "ability_modifier",
     "proficiency_bonus",
     "level_for_xp",
     "next_level_xp",
+    "spell_slots_for",
+    "xp_progress",
     "CharacterSheet",
 ]
 
@@ -48,6 +52,82 @@ XP_BY_LEVEL: dict[int, int] = {
     19: 2650000,
     20: 3350000,
 }
+
+# SRD 5.1 full-caster slots by character level. Each row lists the number of
+# slots for spell levels 1 through 9; trailing zeroes are omitted.
+_FULL_CASTER_SLOTS: tuple[tuple[int, ...], ...] = (
+    (2,),
+    (3,),
+    (4, 2),
+    (4, 3),
+    (4, 3, 2),
+    (4, 3, 3),
+    (4, 3, 3, 1),
+    (4, 3, 3, 2),
+    (4, 3, 3, 3, 1),
+    (4, 3, 3, 3, 2),
+    (4, 3, 3, 3, 2, 1),
+    (4, 3, 3, 3, 2, 1),
+    (4, 3, 3, 3, 2, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1, 1, 1),
+    (4, 3, 3, 3, 3, 1, 1, 1, 1),
+    (4, 3, 3, 3, 3, 2, 1, 1, 1),
+    (4, 3, 3, 3, 3, 2, 2, 1, 1),
+)
+
+# Pact Magic has a separate pool: every slot has the listed level and
+# recovers on a short or long rest.
+_WARLOCK_SLOTS: tuple[tuple[int, int], ...] = (
+    (1, 1),
+    (2, 1),
+    (2, 2),
+    (2, 2),
+    (2, 3),
+    (2, 3),
+    (2, 4),
+    (2, 4),
+    (2, 5),
+    (2, 5),
+    (3, 5),
+    (3, 5),
+    (3, 5),
+    (3, 5),
+    (3, 5),
+    (3, 5),
+    (4, 5),
+    (4, 5),
+    (4, 5),
+    (4, 5),
+)
+
+SPELLCASTING_CLASSES = frozenset(
+    {"bard", "cleric", "druid", "paladin", "ranger", "sorcerer", "warlock", "wizard"}
+)
+_HALF_CASTER_SLOTS: tuple[tuple[int, ...], ...] = (
+    (),
+    (2,),
+    (3,),
+    (3,),
+    (4, 2),
+    (4, 2),
+    (4, 3),
+    (4, 3),
+    (4, 3, 2),
+    (4, 3, 2),
+    (4, 3, 3),
+    (4, 3, 3),
+    (4, 3, 3, 1),
+    (4, 3, 3, 1),
+    (4, 3, 3, 2),
+    (4, 3, 3, 2),
+    (4, 3, 3, 3, 1),
+    (4, 3, 3, 3, 1),
+    (4, 3, 3, 3, 2),
+    (4, 3, 3, 3, 2),
+)
 
 
 def ability_modifier(score: int) -> int:
@@ -82,12 +162,58 @@ def next_level_xp(level: int) -> int | None:
     return None if level == 20 else XP_BY_LEVEL[level + 1]
 
 
+def spell_slots_for(spellcasting_class: str | None, level: int) -> dict[int, int]:
+    """Maximum spell slots by slot level for one SRD 5.1 class (levels 1..20).
+
+    Bard, cleric, druid, sorcerer, and wizard use the full-caster table;
+    paladin and ranger use their half-caster class table; warlock uses its
+    separate Pact Magic pool. Multiclass and subclass progressions are
+    outside this single-class M1 rules slice.
+    """
+    if isinstance(level, bool) or not isinstance(level, int) or not 1 <= level <= 20:
+        raise ValueError(f"level out of range 1..20: {level!r}")
+    if spellcasting_class is None:
+        return {}
+    if not isinstance(spellcasting_class, str):
+        raise ValueError("spellcasting_class must be a string or None")
+    normalized = spellcasting_class.strip().casefold()
+    if normalized not in SPELLCASTING_CLASSES:
+        raise ValueError(f"unsupported spellcasting class: {spellcasting_class!r}")
+    if normalized == "warlock":
+        count, slot_level = _WARLOCK_SLOTS[level - 1]
+        return {slot_level: count}
+    row = (
+        _HALF_CASTER_SLOTS[level - 1]
+        if normalized in {"paladin", "ranger"}
+        else _FULL_CASTER_SLOTS[level - 1]
+    )
+    return {slot_level: count for slot_level, count in enumerate(row, start=1)}
+
+
+def xp_progress(sheet: CharacterSheet) -> dict[str, Any]:
+    """The scoring panel (roadmap M6): where the sheet stands on the XP table.
+
+    Everything is derived from the stored `xp` — the sheet cannot drift from
+    its own numbers (C3). At max level `next_level_xp`/`xp_to_next` are None.
+    """
+    level = sheet.level
+    next_xp = next_level_xp(level)
+    return {
+        "level": level,
+        "proficiency": sheet.proficiency,
+        "xp": sheet.xp,
+        "next_level_xp": next_xp,
+        "xp_to_next": None if next_xp is None else max(0, next_xp - sheet.xp),
+    }
+
+
 @dataclass
 class CharacterSheet:
     """A PC as pure, validated data.
 
-    Derived stats (level, proficiency, modifiers) are computed properties —
-    never stored, so they cannot drift from the numbers they derive from.
+    Derived stats (level, proficiency, modifiers, maximum spell slots) are
+    computed properties — never stored, so they cannot drift from their
+    source numbers. Expended slots are event-backed resource state.
     """
 
     name: str
@@ -98,6 +224,8 @@ class CharacterSheet:
     inventory: dict[str, int] = field(default_factory=dict)
     gold: int = 0
     xp: int = 0
+    spellcasting_class: str | None = None
+    expended_spell_slots: dict[int, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -112,6 +240,38 @@ class CharacterSheet:
             raise ValueError(f"gold cannot be negative: {self.gold}")
         if self.xp < 0:
             raise ValueError(f"xp cannot be negative: {self.xp}")
+        if self.spellcasting_class is not None:
+            if not isinstance(self.spellcasting_class, str):
+                raise ValueError("spellcasting_class must be a string or None")
+            self.spellcasting_class = self.spellcasting_class.strip().casefold()
+            if self.spellcasting_class not in SPELLCASTING_CLASSES:
+                raise ValueError(
+                    f"unsupported spellcasting class: {self.spellcasting_class!r}"
+                )
+        if not isinstance(self.expended_spell_slots, dict):
+            raise ValueError("expended_spell_slots must be a mapping")
+        expended: dict[int, int] = {}
+        for raw_level, count in self.expended_spell_slots.items():
+            if isinstance(raw_level, bool) or not isinstance(raw_level, (int, str)):
+                raise ValueError(f"spell slot level must be 1..9: {raw_level!r}")
+            if isinstance(raw_level, int):
+                slot_level = raw_level
+            elif raw_level.isdecimal():
+                slot_level = int(raw_level)
+            else:
+                raise ValueError(f"spell slot level must be 1..9: {raw_level!r}")
+            if not 1 <= slot_level <= 9:
+                raise ValueError(f"spell slot level must be 1..9: {raw_level!r}")
+            if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+                raise ValueError(f"expended spell slot count must be a positive int: {count!r}")
+            expended[slot_level] = expended.get(slot_level, 0) + count
+        self.expended_spell_slots = expended
+        for slot_level, count in expended.items():
+            maximum = self.max_spell_slots.get(slot_level, 0)
+            if count > maximum:
+                raise ValueError(
+                    f"expended {count} level {slot_level} spell slots, but maximum is {maximum}"
+                )
         for ability, score in self.abilities.items():
             if ability not in ABILITIES:
                 raise ValueError(f"unknown ability: {ability!r}")
@@ -129,6 +289,60 @@ class CharacterSheet:
     @property
     def proficiency(self) -> int:
         return proficiency_bonus(self.level)
+
+    @property
+    def max_spell_slots(self) -> dict[int, int]:
+        """The class/level-derived spell slot capacity."""
+        return spell_slots_for(self.spellcasting_class, self.level)
+
+    @property
+    def spell_slots(self) -> dict[int, int]:
+        """Available slots by spell level; spent slots are event-backed data."""
+        return {
+            slot_level: count - self.expended_spell_slots.get(slot_level, 0)
+            for slot_level, count in self.max_spell_slots.items()
+        }
+
+    def spend_spell_slot(self, slot_level: int) -> int:
+        """Spend one available slot; return the remaining slots at that level."""
+        if isinstance(slot_level, bool) or not isinstance(slot_level, int):
+            raise ValueError(f"spell slot level must be an int: {slot_level!r}")
+        maximum = self.max_spell_slots.get(slot_level)
+        if maximum is None:
+            raise ValueError(f"no level {slot_level} spell slot is available")
+        expended = self.expended_spell_slots.get(slot_level, 0)
+        if expended >= maximum:
+            raise ValueError(f"no level {slot_level} spell slots remain")
+        self.expended_spell_slots[slot_level] = expended + 1
+        return maximum - expended - 1
+
+    def can_restore_spell_slots(self, rest_type: str) -> bool:
+        """Whether this rest would recover any currently expended slots."""
+        if rest_type not in ("short", "long"):
+            raise ValueError(f"rest_type must be short|long: {rest_type!r}")
+        can_recover = rest_type == "long" or (
+            self.spellcasting_class == "warlock" and rest_type == "short"
+        )
+        return can_recover and bool(self.expended_spell_slots)
+
+    def rest(self, rest_type: str) -> tuple[int, int]:
+        """Apply this project's short/long rest HP and spell-slot recovery.
+
+        Returns (HP recovered, spell slots recovered). A long rest restores
+        ordinary slots; Pact Magic also returns on a short rest. Existing
+        project HP semantics are retained: long rest heals to full, short
+        rest heals half the missing HP, rounded up.
+        """
+        if rest_type not in ("short", "long"):
+            raise ValueError(f"rest_type must be short|long: {rest_type!r}")
+        missing = self.max_hp - self.hp
+        healed = missing if rest_type == "long" else -(-missing // 2)
+        self.heal(healed)
+        slots_before = sum(self.spell_slots.values())
+        if self.can_restore_spell_slots(rest_type):
+            self.expended_spell_slots.clear()
+        slots_recovered = sum(self.spell_slots.values()) - slots_before
+        return healed, slots_recovered
 
     def modifier(self, ability: str) -> int:
         """The ability modifier ((score - 10) // 2) for a known ability."""

@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field
+from typing import Any
 
 from rpg import session
 from rpg.dm import arbiter, memory
@@ -48,7 +49,7 @@ from rpg.engine.backstops import (
 from rpg.engine.context import RECALL_LIMIT, build_context
 from rpg.engine.dice import SeededSource, SystemSource
 from rpg.engine.events import Message, WorldDB, WorldEvent
-from rpg.engine.sheet import ABILITIES
+from rpg.engine.sheet import ABILITIES, xp_progress
 from rpg.engine.state import WorldState
 from rpg.llm import prompts
 from rpg.llm.provider import LLMProvider, ProviderError, Usage
@@ -67,6 +68,7 @@ class TurnResult:
     frames: list[tuple[str, str]] = field(default_factory=list)
     dice: list[dict] = field(default_factory=list)
     tool_names: list[str] = field(default_factory=list)
+    tool_effects: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     beat: dict | None = None  # the new active beat, when one started this turn
     usage: dict = field(default_factory=dict)
@@ -349,6 +351,19 @@ class TurnPipeline:
                 outcome = self.engine.dispatch(call.name, call.arguments)
                 result.tool_names.append(outcome.name)
                 result.dice.extend(outcome.dice)
+                if outcome.ok and outcome.name in {
+                    "award",
+                    "end_combat",
+                    "grant_item",
+                    "rest",
+                    "take_item",
+                }:
+                    result.tool_effects.append(
+                        {
+                            "name": outcome.name,
+                            "lines": outcome.authoritative or [outcome.message],
+                        }
+                    )
                 if not outcome.ok:
                     self._error(result, f"tool {outcome.name}: {outcome.message}")
                 feedback = {"ok": outcome.ok, "message": outcome.message}
@@ -487,6 +502,8 @@ class TurnPipeline:
             )
         for die in result.dice:
             result.frames.append(("dice", json.dumps(die)))
+        for effect in result.tool_effects:
+            result.frames.append(("tool", json.dumps(effect)))
         result.frames.append(("state", json.dumps(world.to_dict())))
         result.frames.append(("narration", json.dumps({"text": result.narration})))
         if result.was_meta:
@@ -494,6 +511,9 @@ class TurnPipeline:
                 ("done", json.dumps({"turn": turn, "usage": {}, "meta": True}))
             )
         else:
+            progress = None
+            if world.pc is not None:
+                progress = xp_progress(world.pc.sheet)
             result.frames.append(
                 (
                     "done",
@@ -503,6 +523,7 @@ class TurnPipeline:
                             "usage": result.usage,
                             "tool_calls": result.tool_names,
                             "over_budget": result.over_budget,
+                            "progress": progress,
                         }
                     ),
                 )

@@ -78,6 +78,11 @@ def _req_bool(raw: dict[str, Any], key: str, *, default: bool = False) -> bool:
     return value
 
 
+def _npc_display_name(reference: str) -> str:
+    """Map a recorded ``npc:<name>`` id to the cast's display name."""
+    return reference.removeprefix("npc:").strip()
+
+
 def _req_list(raw: dict[str, Any], key: str, *, default: list | None = None) -> list:
     value = raw.get(key, default)
     if not isinstance(value, list):
@@ -436,11 +441,22 @@ class StorySpine:
         if beat is None or world.pc is None:
             return []
         facts = {fact.value for fact in world.facts}
+        # Models sometimes use the world's namespaced NPC id (``npc:Brenna``)
+        # as the spoke_with value/subject instead of the display name. Treat
+        # that recorded identifier as the same NPC waypoint, but only when the
+        # fact explicitly records a conversation.
+        spoken_to = {
+            _npc_display_name(reference)
+            for fact in world.facts
+            if fact.predicate == "spoke_with"
+            for reference in (fact.subject, fact.value)
+            if reference.startswith("npc:")
+        }
         deltas: list[dict[str, Any]] = []
         for waypoint_index, waypoint in enumerate(beat.waypoints):
             if waypoint.done:
                 continue
-            if self._waypoint_met(waypoint, world, facts):
+            if self._waypoint_met(waypoint, world, facts, spoken_to):
                 deltas.append(
                     {
                         "op": "tick_waypoint",
@@ -451,7 +467,12 @@ class StorySpine:
         return deltas
 
     @staticmethod
-    def _waypoint_met(waypoint: Waypoint, world: WorldState, facts: set[str]) -> bool:
+    def _waypoint_met(
+        waypoint: Waypoint,
+        world: WorldState,
+        facts: set[str],
+        spoken_to: set[str],
+    ) -> bool:
         if waypoint.kind == "place":
             return world.pc is not None and world.pc.location == waypoint.text
         if waypoint.kind == "item":
@@ -459,6 +480,8 @@ class StorySpine:
             if item is None or world.pc is None:
                 return False
             return item.holder == f"pc:{world.pc.sheet.name}"
+        if waypoint.kind == "npc":
+            return waypoint.text in facts or waypoint.text in spoken_to
         return waypoint.text in facts
 
     def advance_events(self) -> list[dict[str, Any]]:

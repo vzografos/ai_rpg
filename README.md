@@ -97,13 +97,13 @@ ai_rpg/
 
 | Milestone | Scope | Status |
 |---|---|---|
-| **M0** | Skeleton: repo layout, Docker, FastAPI + static page + working LLM ping, pytest in-container | **this repo today** |
-| M1 | Deterministic core: dice, checks, combat, XP — zero LLM | next |
-| M2 | World state: SQLite + event log + rebuild property test + context builder | |
-| M3 | Story spine + DM loop → first playable web session (shadow_crown) | |
-| M4 | Backstops + anti-hack + red-line suite | |
-| M5 | Memory: rolling summary, facts/FTS5, spine waypoints, campaign resume | |
-| M6 | Scoring, conformance adventure, real-model evals, deployment hardening | |
+| **M0** | Skeleton: repo layout, Docker, FastAPI + static page + working LLM ping, pytest in-container | **Implemented; live provider and production HTTP smoke passed; `make up` on :8080 not repeated** |
+| M1 | Deterministic core: dice, checks, combat, XP, spell slots — zero LLM | **SRD 5.1 single-class slot progression, spending, and rest recovery implemented; 100% engine statement coverage enforced by `make test` and `make check`. Spell lists/casting effects and multiclassing remain out of scope.** |
+| M2 | World state: SQLite + event log + rebuild property test + context builder | **Implemented; persistence and replay tests pass** |
+| M3 | Story spine + DM loop → first playable web session (shadow_crown) | **Implemented; human 10–20 turn browser session remains** |
+| M4 | Backstops + anti-hack + red-line suite | **Implemented; fake-LLM red-line suite passes** |
+| M5 | Memory: rolling summary, facts/FTS5, spine waypoints, campaign resume | **Implemented; real-model memory behavior remains unverified** |
+| M6 | Scoring, conformance adventure, real-model evals, deployment hardening | **Partial; real-model eval report and clean-machine check remain** |
 
 Details: [the roadmap](docs/roadmap.md) → in-repo `docs/roadmap.md`.
 

@@ -107,6 +107,19 @@ async def test_http_error_raises_provider_error():
 
 
 @pytest.mark.asyncio
+async def test_transport_errors_map_to_provider_error():
+    # A read timeout mid-generation is a provider failure (the pipeline's
+    # "the turn is never lost" handling takes over), not an uncaught crash.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("the model took too long")
+
+    provider = make_provider(handler)
+    with pytest.raises(ProviderError, match="transport error"):
+        await provider.chat([{"role": "user", "content": "hi"}])
+    await provider.aclose()
+
+
+@pytest.mark.asyncio
 async def test_ping_round_trip():
     provider = make_provider(
         ok_handler(

@@ -35,13 +35,16 @@ def tool_names() -> set[str]:
 # --- the schema surface -----------------------------------------------------------
 
 
-def test_the_tool_schemas_cover_the_roadmap_list_plus_award():
+def test_the_tool_schemas_cover_the_roadmap_list_plus_award_and_rest():
+    # M6: `rest` is the only door by which the player's HP recovers (the
+    # conformance run exposed that the engine had no healing path at all).
     assert tool_names() == {
         "roll_check",
         "spawn_npc",
         "move_to",
         "start_combat",
         "end_combat",
+        "rest",
         "grant_item",
         "take_item",
         "quest_update",
@@ -131,11 +134,38 @@ def test_grant_item_adds_and_places_items():
     assert outcome.ok is True
     assert "item_add" in [kind for kind, _ in engine.events]
     assert world.items["A spare torch"].location == "The tavern"
-    held = engine.dispatch("grant_item", {"name": "A second torch", "holder": "npc:Brenna"})
-    assert held.ok is True
-    assert world.items["A second torch"].holder == "npc:Brenna"
+    not_owned = engine.dispatch(
+        "grant_item", {"name": "A second torch", "holder": "npc:Brenna"}
+    )
+    assert not_owned.ok is False
+    assert "only has 0" in not_owned.message
+    assert "A second torch" not in world.items
     with_stranger = engine.dispatch("grant_item", {"name": "X", "holder": "npc:Stranger"})
     assert with_stranger.ok is False
+
+
+def test_grant_item_transfers_sheet_inventory_to_an_npc():
+    world, engine = seeded_world()
+    outcome = engine.dispatch(
+        "grant_item", {"name": "Torch", "holder": "npc:Brenna", "quantity": 1}
+    )
+    assert outcome.ok is True
+    assert world.pc.sheet.inventory["Torch"] == 1
+    assert world.items["Torch"].holder == "npc:Brenna"
+    assert [kind for kind, _ in engine.events] == ["pc_item_remove", "item_add"]
+    assert outcome.authoritative == ["You give 1 Torch to Brenna."]
+
+
+def test_grant_item_rejects_unowned_new_item_to_npc_without_side_effects():
+    world, engine = seeded_world()
+    before = world.to_dict()
+    outcome = engine.dispatch(
+        "grant_item", {"name": "Loaf of bread", "holder": "npc:Old Maren"}
+    )
+    assert outcome.ok is False
+    assert "PC only has 0" in outcome.message
+    assert world.to_dict() == before
+    assert engine.events == []
 
 
 def test_spawn_npc_adds_and_rejects_duplicates():
@@ -198,6 +228,52 @@ def test_award_moves_xp_and_gold_and_rejects_negatives():
     assert engine.dispatch("award", {"xp": 0, "gold": 0}).ok is False
 
 
+def test_rest_recovers_hp_and_clamps():
+    world, engine = seeded_world()
+    world.pc.sheet.max_hp = 14  # pin the numbers, independent of the adventure
+    world.pc.sheet.hp = 4  # down to 4 of 14
+    outcome = engine.dispatch("rest", {"kind": "long"})
+    assert outcome.ok is True
+    assert world.pc.sheet.hp == 14  # fully restored
+    assert "recover 10 HP" in outcome.authoritative[0]
+    # A short rest restores half the missing HP, rounded up.
+    world.pc.sheet.hp = 1
+    outcome = engine.dispatch("rest", {"kind": "short"})
+    assert outcome.ok is True
+    assert world.pc.sheet.hp == 8  # ceil((14-1)/2) = 7
+    # Full HP: nothing to rest; bad kind rejected; the event records the rest.
+    world.pc.sheet.hp = 14
+    assert engine.dispatch("rest", {"kind": "long"}).ok is False
+    assert engine.dispatch("rest", {"kind": "sideways"}).ok is False
+    world.pc.sheet.hp = 3
+    engine.begin_turn()
+    engine.dispatch("rest", {"kind": "long"})
+    assert ("pc_rest", {"kind": "long"}) in engine.events
+
+
+def test_rest_recovers_spell_slots_and_can_run_at_full_hp():
+    world, engine = seeded_world()
+    sheet = world.pc.sheet
+    sheet.spellcasting_class = "wizard"
+    sheet.spend_spell_slot(1)
+
+    # A short rest does not restore ordinary spell slots and has no HP to heal.
+    assert engine.dispatch("rest", {"kind": "short"}).ok is False
+    assert sheet.spell_slots == {1: 1}
+
+    outcome = engine.dispatch("rest", {"kind": "long"})
+    assert outcome.ok is True
+    assert sheet.spell_slots == {1: 2}
+    assert "recover 1 level 1 spell slot" in outcome.authoritative[0]
+
+    sheet.spellcasting_class = "warlock"
+    sheet.spend_spell_slot(1)
+    outcome = engine.dispatch("rest", {"kind": "short"})
+    assert outcome.ok is True
+    assert sheet.spell_slots == {1: 1}
+    assert ("pc_rest", {"kind": "short"}) in engine.events
+
+
 def test_ask_clarification_ends_the_turn_with_the_question():
     world, engine = seeded_world()
     outcome = engine.dispatch("ask_clarification", {"question": "Which door do you mean?"})
@@ -254,12 +330,13 @@ def test_end_combat_derives_the_outcome_from_the_committed_state():
     world, engine = seeded_world()
     encounter = adventure.encounters[0]
     assert engine.dispatch("start_combat", {"participants": encounter["participants"]}).ok
-    # Seed 42: the ambush ends in a PC victory (both cultists down, PC at 9 HP).
+    # Seed 42: the ambush ends in a PC victory (both cultists down; the PC
+    # takes the same 5 damage as always, off the tuned 20 HP pool -> 15).
     outcome = engine.dispatch("end_combat", {"outcome": "victory", "xp_award": 50})
     assert outcome.ok is True
     assert world.combat is None
     assert world.pc.sheet.xp == 50
-    assert world.pc.sheet.hp == 9
+    assert world.pc.sheet.hp == 15
     # A mismatched claim is rejected by the engine.
     world2, engine2 = seeded_world()
     assert engine2.dispatch("start_combat", {"participants": encounter["participants"]}).ok

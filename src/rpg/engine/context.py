@@ -136,6 +136,12 @@ def state_block(world: WorldState, *, recalled_facts: list[Fact] | None = None) 
             f"PC: {sheet.name} — level {sheet.level}, HP {sheet.hp}/{sheet.max_hp}, AC {sheet.ac}, "
             f"proficiency {sheet.proficiency}, gold {sheet.gold}, XP {sheet.xp}"
         )
+        if sheet.spellcasting_class is not None:
+            slots = ", ".join(
+                f"level {slot_level}: {available}/{sheet.max_spell_slots[slot_level]}"
+                for slot_level, available in sheet.spell_slots.items()
+            )
+            lines.append(f"Spell slots ({sheet.spellcasting_class}): {slots or 'none'}")
         if sheet.inventory:
             lines.append(f"Inventory: {_fmt_inventory(sheet.inventory)}")
     for name in sorted(world.npcs):

@@ -3,7 +3,7 @@
 # Dev loop (source bind-mount, deps synced IN the container, uvicorn reload):
 #   docker compose -f docker/compose.yml --profile dev up --build
 # Tests (inside the container — never on the host):
-#   docker compose -f docker/compose.yml run --rm test
+#   docker compose -f docker/compose.yml --profile test run --rm test
 # Local LLM (optional sibling service; then set LLM_* in .env):
 #   docker compose -f docker/compose.yml --profile dev --profile ollama up --build
 #   docker compose -f docker/compose.yml --profile ollama exec ollama ollama pull llama3.1:8b
@@ -36,7 +36,53 @@ services:
 
   test:
     <<: *app-base
-    entrypoint: ["/bin/sh", "-c", "uv sync --no-dev --frozen && exec uv run pytest -v"]
+    profiles: [test]
+    entrypoint:
+      [
+        "/bin/sh",
+        "-c",
+        "uv sync --no-dev --frozen && exec uv run pytest -v --cov=rpg.engine --cov-report=term-missing --cov-fail-under=100",
+      ]
+
+  # Hardened deployment (M6.4): the SAME image, no bind mounts (source is
+  # baked in), read-only rootfs, the non-root `rpg` user (Dockerfile), a
+  # persistent volume for the SQLite DB, and no-new-privileges. This is the
+  # service the LXC runbook (docs/lxc-runbook.md) runs.
+  prod:
+    profiles: [prod]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ai-rpg:dev
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      RPG_DATA: /app/data
+    volumes:
+      - rpg-data:/app/data
+    ports:
+      - "8080:8080"
+    # The baked venv's interpreter directly: `uv run` wants a writable cache,
+    # which a read-only rootfs (correctly) refuses.
+    command:
+      [
+        "/app/.venv/bin/python",
+        "-m",
+        "uvicorn",
+        "rpg.web.app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+      ]
 
   # Optional local model. Reachable from `app` as http://ollama:11434/v1.
   ollama:

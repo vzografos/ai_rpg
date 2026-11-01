@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from rpg.dm.spine import StorySpine
 from rpg.engine.events import (
     EVENT_KINDS,
     MESSAGE_ROLES,
@@ -20,6 +21,7 @@ from rpg.engine.events import (
     WorldCorruptionError,
     WorldDB,
     WorldEvent,
+    default_db_path,
     rebuild_world,
 )
 from rpg.engine.state import WorldState
@@ -76,6 +78,8 @@ def test_world_event_validates_kind_and_payload():
         WorldEvent(turn=0, kind="pc_damage", payload="not an object")
     with pytest.raises(ValueError, match="turn"):
         WorldEvent(turn=-1, kind="pc_damage", payload={})
+    with pytest.raises(ValueError, match="seq"):
+        WorldEvent(turn=0, kind="pc_damage", payload={}, seq=0)
     assert set(EVENT_KINDS) >= {"world_init", "pc_damage", "combat_begin", "fact_add"}
 
 
@@ -85,6 +89,15 @@ def test_message_validates_role_and_content():
         Message(turn=0, role="tool", content="x")
     with pytest.raises(ValueError, match="content"):
         Message(turn=0, role="user", content="")
+    with pytest.raises(ValueError, match="id"):
+        Message(turn=0, role="user", content="x", id=0)
+    with pytest.raises(ValueError, match="turn"):
+        Message(turn=-1, role="user", content="x")
+
+
+def test_default_db_path_uses_the_configured_data_directory(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("RPG_DATA", "/tmp/rpg-data-test")
+    assert default_db_path() == Path("/tmp/rpg-data-test/rpg.db")
 
 
 def test_rebuild_world_replays_in_order_and_rejects_scrambled_seqs():
@@ -146,6 +159,37 @@ def test_commit_rejects_mismatched_turns_and_unknown_kinds(tmp_path: Path):
     with WorldDB(tmp_path / "w.db") as db:
         assert db.event_count() == 1
         assert db.messages() == []
+
+
+def test_commit_rechecks_a_tampered_event_kind(tmp_path: Path):
+    with WorldDB(tmp_path / "w.db") as db:
+        world = fresh_world()
+        event = WorldEvent(turn=0, kind="world_init", payload=INITIAL)
+        # WorldEvent is frozen, but commit still defends its own boundary if
+        # an object was tampered with after construction.
+        object.__setattr__(event, "kind", "make_it_rain")
+        with pytest.raises(ValueError, match="unknown event kind"):
+            db.commit(world, [event], [])
+        assert db.event_count() == 0
+
+
+def test_commit_rolls_back_log_and_snapshot_when_table_sync_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    with WorldDB(tmp_path / "w.db") as db:
+        world = fresh_world()
+
+        def fail_resync(_world: WorldState) -> None:
+            raise RuntimeError("simulated table sync failure")
+
+        monkeypatch.setattr(db, "_resync_tables", fail_resync)
+        with pytest.raises(RuntimeError, match="table sync"):
+            db.commit(world, [WorldEvent(turn=0, kind="world_init", payload=INITIAL)], [])
+
+        assert db.event_count() == 0
+        assert db.last_snapshot() is None
+        assert not db._conn.in_transaction
+        assert world.turn == 0
 
 
 def test_event_log_has_no_amend_surface(tmp_path: Path):
@@ -286,6 +330,102 @@ def test_load_world_resyncs_corrupted_entity_tables_from_the_log(tmp_path: Path)
         assert world is not None and world.pc.sheet.gold == 9
         assert world.fingerprint() == good
         assert db.load_from_tables().pc.sheet.gold == 9  # healed
+
+
+def test_load_from_tables_restores_a_materialized_story_spine(tmp_path: Path):
+    world = fresh_world()
+    story = StorySpine.from_dict(
+        {
+            "premise": "A crown must stay lost.",
+            "stakes": "The village is at risk.",
+            "antagonist": "Vesper",
+            "beats": [{"text": "Find the candle", "act": 1}],
+            "finale": "The harvest is saved.",
+        }
+    )
+    payload = {"spine": story.to_dict()}
+    world.apply_event("spine_set", payload, turn=0)
+    with WorldDB(tmp_path / "w.db") as db:
+        db.commit(
+            world,
+            [
+                WorldEvent(turn=0, kind="world_init", payload=INITIAL),
+                WorldEvent(turn=0, kind="spine_set", payload=payload),
+            ],
+            [],
+        )
+        loaded = db.load_from_tables()
+
+    assert loaded is not None and loaded.spine is not None
+    assert loaded.spine.to_dict() == story.to_dict()
+
+
+def test_spell_slot_events_replay_and_match_the_materialized_pc(tmp_path: Path):
+    payload = {**INITIAL, "pc": {**INITIAL["pc"], "spellcasting_class": "wizard"}}
+    with WorldDB(tmp_path / "caster.db") as db:
+        world = WorldState()
+        world.apply_event("world_init", payload, turn=0)
+        db.commit(world, [WorldEvent(turn=0, kind="world_init", payload=payload)], [])
+        spend = WorldEvent(turn=1, kind="pc_spell_slot_spend", payload={"level": 1})
+        world.apply_event(spend.kind, spend.payload, spend.turn)
+        db.commit(world, [spend], [])
+
+        from_tables = db.load_from_tables()
+        from_log = db.load_world()
+        spent_state = world.to_dict()
+        rest = WorldEvent(turn=2, kind="pc_rest", payload={"kind": "long"})
+        world.apply_event(rest.kind, rest.payload, rest.turn)
+        db.commit(world, [rest], [])
+        after_rest = db.load_world()
+        after_rest_tables = db.load_from_tables()
+
+    assert from_tables is not None and from_log is not None
+    assert from_tables.to_dict() == from_log.to_dict() == spent_state
+    assert from_tables.pc.sheet.spellcasting_class == "wizard"
+    assert from_tables.pc.sheet.expended_spell_slots == {1: 1}
+    assert from_tables.pc.sheet.spell_slots == {1: 1}
+    assert after_rest is not None and after_rest_tables is not None
+    assert after_rest.to_dict() == after_rest_tables.to_dict() == world.to_dict()
+    assert after_rest.pc.sheet.expended_spell_slots == {}
+    assert after_rest.pc.sheet.spell_slots == {1: 2}
+
+
+def test_open_migrates_legacy_pc_table_with_no_slot_columns(tmp_path: Path):
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE pc (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL, "
+        "hp INTEGER NOT NULL, max_hp INTEGER NOT NULL, ac INTEGER NOT NULL, "
+        "abilities TEXT NOT NULL, inventory TEXT NOT NULL, gold INTEGER NOT NULL, "
+        "xp INTEGER NOT NULL, location TEXT NOT NULL DEFAULT '', "
+        "description TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '[]')"
+    )
+    conn.close()
+
+    with WorldDB(path) as db:
+        columns = {row[1] for row in db._conn.execute("PRAGMA table_info(pc)")}
+        assert {"spellcasting_class", "expended_spell_slots"} <= columns
+
+
+def test_fact_recall_dedupes_rows_and_survives_a_missing_fts_index(tmp_path: Path):
+    with WorldDB(tmp_path / "w.db") as db:
+        world = fresh_world()
+        db.commit(world, [WorldEvent(turn=0, kind="world_init", payload=INITIAL)], [])
+        payload = {"subject": "Tower", "predicate": "holds", "value": "ember"}
+        world.apply_event("fact_add", payload, turn=1)
+        world.apply_event("fact_add", payload, turn=1)
+        db.commit(
+            world,
+            [
+                WorldEvent(turn=1, kind="fact_add", payload=payload),
+                WorldEvent(turn=1, kind="fact_add", payload=payload),
+            ],
+            [],
+        )
+
+        assert db.recall_facts("ember") == [world.facts[0]]
+        db._conn.execute("DROP TABLE fact_fts")
+        assert db.recall_facts("ember") == []
 
 
 def test_load_world_detects_a_corrupted_log_against_the_snapshot(tmp_path: Path):

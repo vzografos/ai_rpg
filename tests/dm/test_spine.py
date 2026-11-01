@@ -220,6 +220,33 @@ def test_fact_waypoints_tick_from_recorded_facts():
     assert story.progress_events(world) == [{"op": "tick_waypoint", "beat": 0, "waypoint": 0}]
 
 
+def test_npc_waypoint_accepts_namespaced_id_in_spoke_with_fact():
+    story = spine()
+    world = world_with_pc()
+    world.apply_event(
+        "fact_add",
+        {
+            "subject": "Kellan",
+            "predicate": "spoke_with",
+            "value": "npc:Brenna",
+            "source": "dm",
+        },
+        1,
+    )
+    assert story.progress_events(world) == [{"op": "tick_waypoint", "beat": 0, "waypoint": 0}]
+
+
+def test_npc_id_in_non_conversation_fact_does_not_tick_waypoint():
+    story = spine()
+    world = world_with_pc()
+    world.apply_event(
+        "fact_add",
+        {"subject": "Kellan", "predicate": "noted", "value": "npc:Brenna", "source": "dm"},
+        1,
+    )
+    assert story.progress_events(world) == []
+
+
 def test_only_the_active_beats_waypoints_are_considered():
     story = spine()
     world = world_with_pc()

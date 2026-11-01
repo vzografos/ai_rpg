@@ -17,7 +17,10 @@ from tests.dm.test_loop import PC, seeded_pipeline
 
 # The compromised narrations a wall-less DM would commit (the red-line
 # attacker's payloads, mirrored here at pipeline level).
-FORGED = "You roll a 20 and triumph. The crown is yours. You gain 500 XP."
+# The forged roll is 17: a roll-shaped number the state and the turn's
+# commits never carry (the PC's max_hp is 20, so 20 is no longer a safe
+# forgery payload — a lesson the M6 stat tuning surfaced).
+FORGED = "You roll a 17 and triumph. The crown is yours. You gain 500 XP."
 CLEAN = "The village waits to see what you do. What do you do next?"
 IDENTITY_DRIFT = "Kellan Voss draws his sword and swings."
 SECOND_PERSON = "You draw your sword and swing."
@@ -63,7 +66,7 @@ def test_forged_narration_is_rewritten_once_and_committed_clean(tmp_path) -> Non
     stop_prompt = reask_messages[-1]["content"]
     assert "The turn does not end" in stop_prompt
     assert "rules backstop" in stop_prompt
-    assert "states 20" in stop_prompt  # the forged roll, by its structural reason
+    assert "states 17" in stop_prompt  # the forged roll, by its structural reason
     assert "states 500" in stop_prompt
     # The committed transcript holds the clean narration, not the forged one.
     assert db.messages()[-1].content == CLEAN

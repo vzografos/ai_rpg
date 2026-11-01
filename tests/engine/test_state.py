@@ -8,14 +8,19 @@ from __future__ import annotations
 
 import pytest
 
+from rpg.dm.spine import StorySpine
 from rpg.engine.sheet import ABILITIES
 from rpg.engine.state import (
     COMBAT_OUTCOMES,
     NPC_STATUSES,
     QUEST_STATUSES,
     CombatantRecord,
+    CombatState,
+    Fact,
     Item,
+    Location,
     Npc,
+    PlayerCharacter,
     Quest,
     WorldState,
 )
@@ -145,6 +150,61 @@ def test_combatant_record_validates_like_m1():
         CombatantRecord(**make_combatant(conditions=["charmed"]))
 
 
+def test_entity_records_reject_empty_names_and_invalid_counts():
+    with pytest.raises(ValueError, match="npc name"):
+        Npc(name="")
+    with pytest.raises(ValueError, match="item name"):
+        Item(name="")
+    with pytest.raises(ValueError, match="quantity"):
+        Item(name="Torch", quantity=0)
+    with pytest.raises(ValueError, match="quest name"):
+        Quest(name="")
+    with pytest.raises(ValueError, match="location name"):
+        Location(name="")
+    with pytest.raises(ValueError, match="fact turn"):
+        Fact(subject="S", predicate="P", value="V", turn=-1)
+
+
+def test_entity_records_reject_malformed_notes_and_combat_stats():
+    sheet = make_world().pc.sheet
+    with pytest.raises(ValueError, match="note entry must"):
+        PlayerCharacter(sheet=sheet, notes=[{"turn": "one", "text": "bad"}])
+    with pytest.raises(ValueError, match="note entry text"):
+        Npc(name="Fen", notes=[{"turn": 1, "text": ""}])
+    with pytest.raises(ValueError, match="combatant name"):
+        CombatantRecord(**make_combatant(""))
+    with pytest.raises(ValueError, match="max_hp"):
+        CombatantRecord(**make_combatant(max_hp=0, hp=0))
+    with pytest.raises(ValueError, match="ac"):
+        CombatantRecord(**make_combatant(ac=0))
+    with pytest.raises(ValueError, match="death_successes"):
+        CombatantRecord(**make_combatant(death_successes=4))
+
+
+def test_combat_state_rejects_invalid_turn_order_and_outcome():
+    participants = {
+        name: CombatantRecord(**make_combatant(name)) for name in ("Mira", "Grak")
+    }
+    with pytest.raises(ValueError, match="at least 2"):
+        CombatState(participants=participants, order=["Mira"], index=0, round=0)
+    with pytest.raises(ValueError, match="unique"):
+        CombatState(participants=participants, order=["Mira", "Mira"], index=0, round=0)
+    with pytest.raises(ValueError, match="exactly the participants"):
+        CombatState(participants=participants, order=["Mira", "Stranger"], index=0, round=0)
+    with pytest.raises(ValueError, match="index"):
+        CombatState(participants=participants, order=["Mira", "Grak"], index=2, round=0)
+    with pytest.raises(ValueError, match="round"):
+        CombatState(participants=participants, order=["Mira", "Grak"], index=0, round=-1)
+    with pytest.raises(ValueError, match="outcome"):
+        CombatState(
+            participants=participants,
+            order=["Mira", "Grak"],
+            index=0,
+            round=0,
+            outcome="draw",
+        )
+
+
 # --- world_init -------------------------------------------------------------------
 
 
@@ -161,6 +221,38 @@ def test_world_init_builds_every_entity():
     assert set(world.locations) == {"The village square", "The tavern"}
     assert world.locations["The village square"].exits == ["The tavern"]
     assert len(world.facts) == 1 and world.facts[0].turn == 1
+
+
+def test_spell_slot_events_are_validated_and_part_of_caster_state():
+    world = WorldState()
+    world.apply_event(
+        "world_init",
+        {"pc": {"name": "Mira", "spellcasting_class": "Wizard"}},
+        turn=0,
+    )
+    sheet = world.pc.sheet
+    assert sheet.spellcasting_class == "wizard"
+    assert sheet.spell_slots == {1: 2}
+    assert world.to_dict()["pc"]["max_spell_slots"] == {1: 2}
+    legacy_pc = make_world().to_dict()["pc"]
+    assert set(legacy_pc) == {
+        "name", "hp", "max_hp", "ac", "abilities", "inventory", "gold", "xp",
+        "location", "description", "notes",
+    }
+
+    world.apply_event("pc_spell_slot_spend", {"level": 1}, turn=1)
+    assert sheet.spell_slots == {1: 1}
+    world.apply_event("pc_spell_slot_spend", {"level": 1}, turn=1)
+    assert sheet.spell_slots == {1: 0}
+    with pytest.raises(ValueError, match="no level 1 spell slots remain"):
+        world.apply_event("pc_spell_slot_spend", {"level": 1}, turn=1)
+    with pytest.raises(ValueError, match="must be an int"):
+        world.apply_event("pc_spell_slot_spend", {"level": True}, turn=1)
+    with pytest.raises(ValueError, match="rest_type must be short|long"):
+        world.apply_event("pc_rest", {"kind": "overnight"}, turn=1)
+
+    world.apply_event("pc_rest", {"kind": "long"}, turn=2)
+    assert sheet.spell_slots == {1: 2}
 
 
 def test_world_init_requires_a_pc_and_rejects_non_empty_worlds():
@@ -263,6 +355,50 @@ def test_pc_events_require_a_pc():
     world = WorldState()
     with pytest.raises(ValueError, match="no player character"):
         world.apply_event("pc_damage", {"amount": 1}, turn=1)
+
+
+def test_apply_event_rejects_unknown_kinds_and_bad_payload_types():
+    world = make_world()
+    with pytest.raises(ValueError, match="unknown event kind"):
+        world.apply_event("teleport_everywhere", {}, turn=1)
+    with pytest.raises(ValueError, match="must be a string"):
+        world.apply_event("npc_add", {"name": 7}, turn=1)
+    with pytest.raises(ValueError, match="must be an int"):
+        world.apply_event("pc_damage", {"amount": True}, turn=1)
+    with pytest.raises(ValueError, match="must be a list"):
+        world.apply_event("location_add", {"name": "Annex", "exits": "The tavern"}, turn=1)
+    begin_combat(world)
+    with pytest.raises(ValueError, match="must be a bool"):
+        world.apply_event(
+            "combat_attack",
+            {"attacker": "Mira", "defender": "Grak", "melee": "yes", "hit": False},
+            turn=1,
+        )
+
+
+def test_entity_add_and_note_events_reject_empty_text():
+    world = make_world()
+    for kind, payload, message in (
+        ("npc_add", {"name": ""}, "npc_add name"),
+        ("npc_note", {"name": "Brenna", "text": ""}, "npc_note text"),
+        ("item_add", {"name": ""}, "item_add name"),
+        ("quest_add", {"name": ""}, "quest_add name"),
+        ("location_add", {"name": ""}, "location_add name"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            world.apply_event(kind, payload, turn=1)
+
+
+def test_world_lookup_helpers_report_unknown_entities():
+    world = make_world()
+    for lookup in (
+        lambda: world.quest("missing"),
+        lambda: world.location("missing"),
+        lambda: world.item("missing"),
+        lambda: world.combatant("Mira"),
+    ):
+        with pytest.raises(ValueError):
+            lookup()
 
 
 # --- npcs ------------------------------------------------------------------------
@@ -387,6 +523,31 @@ def test_fact_add_and_remove_by_content_not_turn():
         world.apply_event("fact_add", {"subject": "", "predicate": "Y", "value": "Z"}, turn=6)
 
 
+def test_spine_and_summary_event_guards():
+    world = WorldState()
+    with pytest.raises(ValueError, match="spine object"):
+        world.apply_event("spine_set", {"spine": None}, turn=0)
+    with pytest.raises(ValueError, match="no spine"):
+        world.apply_event("spine_delta", {"op": "append_detail"}, turn=0)
+
+    story = StorySpine.from_dict(
+        {
+            "premise": "A crown must not be recrowned.",
+            "stakes": "The village starves.",
+            "antagonist": "Vesper",
+            "beats": [{"text": "Find the crown", "act": 1}],
+            "finale": "The fields recover.",
+        }
+    )
+    world.spine = story
+    with pytest.raises(ValueError, match="already set"):
+        world.apply_event("spine_set", {"spine": story.to_dict()}, turn=0)
+    with pytest.raises(ValueError, match="requires an op"):
+        world.apply_event("spine_delta", {"op": ""}, turn=0)
+    with pytest.raises(ValueError, match="non-empty summary"):
+        world.apply_event("summary_set", {"summary": "", "watermark": 0}, turn=0)
+
+
 # --- combat (committed results, never re-rolled) -------------------------------------------
 
 
@@ -423,6 +584,79 @@ def test_combat_begin_validates_the_order():
     payload["order"] = [{"name": "Mira", "initiative": 5}]
     with pytest.raises(ValueError, match="exactly the participants"):
         world.apply_event("combat_begin", payload, turn=0)
+
+
+def test_combat_begin_rejects_duplicate_dead_participants_and_bad_order_entries():
+    world = make_world()
+    duplicate = {
+        "participants": [make_combatant("Mira"), make_combatant("Mira")],
+        "order": [{"name": "Mira", "initiative": 5}, {"name": "Mira", "initiative": 4}],
+    }
+    with pytest.raises(ValueError, match="duplicate combatant"):
+        world.apply_event("combat_begin", duplicate, turn=0)
+
+    no_living = {
+        "participants": [
+            make_combatant("Mira", hp=0),
+            make_combatant("Grak", hp=0),
+        ],
+        "order": [{"name": "Mira", "initiative": 5}, {"name": "Grak", "initiative": 4}],
+    }
+    with pytest.raises(ValueError, match="no living combatant"):
+        world.apply_event("combat_begin", no_living, turn=0)
+
+    malformed_order = {
+        "participants": [make_combatant("Mira"), make_combatant("Grak")],
+        "order": [{"name": "Mira", "initiative": 5}, "Grak"],
+    }
+    with pytest.raises(ValueError, match="entry must be an object"):
+        world.apply_event("combat_begin", malformed_order, turn=0)
+
+
+def test_combat_attack_rejects_an_attacker_who_cannot_act():
+    world = make_world()
+    begin_combat(world)
+    world.combat.participants["Grak"].hp = 0
+    with pytest.raises(ValueError, match="attacker cannot act"):
+        world.apply_event(
+            "combat_attack",
+            {"attacker": "Grak", "defender": "Mira", "melee": True, "hit": True},
+            turn=1,
+        )
+
+
+def test_combat_turn_checks_actor_and_skips_dead_combatants_across_rounds():
+    world = make_world()
+    begin_combat(world)
+    with pytest.raises(ValueError, match="not .* turn"):
+        world.apply_event("combat_turn", {"actor": "Grak"}, turn=1)
+
+    participants = [
+        make_combatant("Mira"),
+        make_combatant("Grak", hp=0),
+        make_combatant("Shade", hp=0),
+    ]
+    world = make_world()
+    world.apply_event(
+        "combat_begin",
+        {
+            "participants": participants,
+            "order": [
+                {"name": "Mira", "initiative": 17},
+                {"name": "Grak", "initiative": 9},
+                {"name": "Shade", "initiative": 5},
+            ],
+        },
+        turn=0,
+    )
+    world.apply_event("combat_turn", {"actor": "Mira"}, turn=1)
+    assert world.combat.current == "Mira"
+    assert world.combat.round == 1
+
+    for record in world.combat.participants.values():
+        record.hp = 0
+    with pytest.raises(ValueError, match="no living combatant"):
+        world.apply_event("combat_turn", {"actor": "Mira"}, turn=2)
 
 
 def test_combat_attack_miss_changes_nothing():

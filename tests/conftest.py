@@ -88,7 +88,7 @@ class FakeProvider:
         system: str,
         user: str,
         *,
-        max_tokens: int = 512,
+        max_tokens: int = 4096,
     ) -> dict[str, Any]:
         self.calls.append({"extract_json": True, "system": system, "user": user})
         if self._error:

@@ -1,8 +1,8 @@
 """FastAPI app: the transport-agnostic game server (the documented layout, constraint C2).
 
-M5 surface:
+M6 surface:
     GET  /                   the single static page (chat pane + sidebar, vanilla JS)
-    GET  /api/status         app + model info (milestone M5)
+    GET  /api/status         app + model info + the scoring panel (milestone M6)
     GET  /api/ping           one-shot LLM round-trip ("LLM says hello")
     POST /api/new            start a session: seed the pre-authored adventure
     POST /api/save           checkpoint the campaign (named save; default turn-N)
@@ -39,6 +39,7 @@ from rpg.dm.loop import TurnPipeline
 from rpg.engine.context import dump_context
 from rpg.engine.dice import SeededSource, SystemSource
 from rpg.engine.events import Message, WorldDB, default_db_path
+from rpg.engine.sheet import xp_progress
 from rpg.engine.state import WorldState
 from rpg.llm import prompts
 from rpg.llm.provider import LLMProvider, ProviderConfig, ProviderError
@@ -136,6 +137,14 @@ async def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+def _scoring_panel(world: WorldState | None) -> dict[str, Any] | None:
+    """The M6 progress panel (XP/level + next-level cost), when a sheet exists."""
+    if world is None or world.is_empty or world.pc is None:
+        return None
+    sheet = world.pc.sheet
+    return {**xp_progress(sheet), "hp": sheet.hp, "max_hp": sheet.max_hp, "gold": sheet.gold}
+
+
 @app.get("/api/status")
 async def status(request: Request) -> dict[str, Any]:
     provider: LLMProvider = request.app.state.provider
@@ -143,10 +152,11 @@ async def status(request: Request) -> dict[str, Any]:
     return {
         "app": "ai_rpg",
         "version": __version__,
-        "milestone": "M5",
+        "milestone": "M6",
         "model": provider.config.model,
         "base_url": provider.config.base_url,
         "world": bool(world is not None and not world.is_empty),
+        "progress": _scoring_panel(world),
     }
 
 

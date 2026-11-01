@@ -14,9 +14,12 @@ from typing import Any
 from rpg.engine.backstops import (
     BACKSTOP_KINDS,
     Violation,
+    allowed_numbers,
+    check_combat_transition,
     check_secret_leak,
     claim_numbers,
     fallback_narration,
+    keeper_secrets,
     run_backstops,
 )
 from rpg.engine.state import WorldState
@@ -147,6 +150,45 @@ def test_forgery_passes_when_quoting_engine_state() -> None:
 def test_forgery_ignores_ordinary_prose_numbers() -> None:
     violations = _check("You count three torches on the wall and two shadows beyond.")
     assert violations == []
+
+
+def test_allowed_numbers_includes_world_items_and_active_combat():
+    world = make_world()
+    world.apply_event("item_add", {"name": "Loose token", "quantity": 7}, turn=1)
+    participants = [
+        {
+            "name": PC_NAME, "ac": 13, "hp": 14, "max_hp": 14, "dexterity": 12,
+            "attack_bonus": 2, "damage": "1d8+2", "conditions": ["stunned"],
+        },
+        {
+            "name": "Marrow", "ac": 11, "hp": 9, "max_hp": 9, "dexterity": 10,
+            "attack_bonus": 3, "damage": "1d6+1",
+        },
+    ]
+    world.apply_event(
+        "combat_begin",
+        {
+            "participants": participants,
+            "order": [{"name": "Marrow", "initiative": 15}, {"name": PC_NAME, "initiative": 9}],
+        },
+        turn=1,
+    )
+
+    numbers = allowed_numbers([], [], world)
+
+    assert 7 in numbers  # loose item quantity
+    assert {9, 11, 14} <= numbers  # combatant HP and AC
+    assert 15 not in numbers  # initiative is not displayed as an engine state number
+
+
+def test_allowed_numbers_includes_spell_slot_state():
+    world = make_world()
+    world.pc.sheet.spellcasting_class = "wizard"
+    world.pc.sheet.spend_spell_slot(1)
+
+    numbers = allowed_numbers([], [], world)
+
+    assert {1, 2} <= numbers  # slot level, available count, and maximum count
 
 
 # --- contradiction ---------------------------------------------------------------
@@ -304,6 +346,34 @@ def test_combat_transition_passes_on_a_pronoun_attacker() -> None:
     assert violations == []
 
 
+def test_combat_transition_accepts_registered_attacker_and_world_condition():
+    world = make_world()
+    participants = [
+        {
+            "name": PC_NAME, "ac": 13, "hp": 14, "max_hp": 14, "dexterity": 12,
+            "attack_bonus": 2, "damage": "1d8+2", "conditions": ["stunned"],
+        },
+        {
+            "name": "Marrow", "ac": 11, "hp": 9, "max_hp": 9, "dexterity": 10,
+            "attack_bonus": 3, "damage": "1d6+1",
+        },
+    ]
+    world.apply_event(
+        "combat_begin",
+        {
+            "participants": participants,
+            "order": [{"name": "Marrow", "initiative": 15}, {"name": PC_NAME, "initiative": 9}],
+        },
+        turn=1,
+    )
+
+    # The repeated match is deduped, Marrow is a known participant, and the
+    # condition is already present on the committed PC combat record.
+    assert check_combat_transition(
+        "Marrow hits you. Marrow hits you. You are stunned.", world, []
+    ) == []
+
+
 def test_combat_transition_flags_a_pc_attack_on_a_stranger() -> None:
     violations = _check(
         "You hit the tavern wall for 6.",
@@ -366,6 +436,13 @@ def test_secret_leak_flags_a_verbatim_spine_event_detail() -> None:
     )
     violations = _check(f"The ambush is exactly as the record says: {detail}")
     assert _kinds(violations) == {"secret_leak"}
+
+
+def test_keeper_secrets_includes_beat_detail() -> None:
+    world = make_world()
+    detail = "The copper doors open only when the eclipse ends."
+    world.spine.beats[0].detail = detail
+    assert detail in keeper_secrets(world)
 
 
 def test_secret_leak_allows_a_paraphrase() -> None:

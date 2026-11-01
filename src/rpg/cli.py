@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps({
                     "app": "ai_rpg",
                     "version": __version__,
-                    "milestone": "M5",
+                    "milestone": "M6",
                     "model": cfg.model,
                     "base_url": cfg.base_url,
                     "api_key_set": bool(cfg.api_key),
