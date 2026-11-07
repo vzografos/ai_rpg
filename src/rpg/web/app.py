@@ -1,4 +1,4 @@
-"""FastAPI app: the transport-agnostic game server (the documented layout, constraint C2).
+"""FastAPI app: the transport-agnostic game server (constraint C2).
 
 M6 surface:
     GET  /                   the single static page (chat pane + sidebar, vanilla JS)

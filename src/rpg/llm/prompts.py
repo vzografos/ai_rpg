@@ -1,7 +1,7 @@
 """All prompt templates in one module (the documented layout: llm/prompts.py).
 
 M0 carries the connectivity ping + the skeleton's one-shot "turn". M2 lands
-the stable/volatile split blocks (Loreweaver's layout, the state/memory layout):
+the stable/volatile split blocks (Loreweaver's layout):
 DM identity + rules summary + GM-quality standards + keeper discipline in
 the cacheable *stable head*; the engine-provided state header opens the
 *volatile tail*. M3 adds the spine [NOW] block, the DM round loop's tool
@@ -142,7 +142,7 @@ def player_action_wrap(text: str) -> str:
 # reasons, and the model rewrites the same scene in text only (tools disabled).
 
 def stop_reask(violations: list[str]) -> str:
-    """The Stop-form re-ask (the bounded correction loop): bounded correction, no fiction."""
+    """The Stop-form re-ask: bounded correction, no fiction."""
     reasons = "\n".join(f"- {reason}" for reason in violations)
     return (
         "The turn does not end. Your narration was rejected by the rules backstop:\n"
@@ -258,7 +258,7 @@ def fact_extract_user(
     return "\n\n".join(parts)
 
 
-# --- M5: the spine's clamped refresh at beat completion (the story spine) -----------
+# --- M5: the clamped story-spine refresh at beat completion -------------------
 # At chapter close the model may annotate beats, skip beats the chapter made
 # moot, or rewrite a not-yet-played beat of the current act — never touch a
 # completed beat. Every proposed delta is clamped by StorySpine.apply_delta
@@ -284,7 +284,7 @@ def spine_refresh_user(completed_text: str, now_block: str) -> str:
     )
 
 
-# --- M6: the play-quality judge (the evaluation axes, layer 3) ---------------------------
+# --- M6: the play-quality judge (eval layer 3) --------------------------------
 # The second-model judge: one strict-JSON call per committed turn, scoring the
 # four eval axes. It never gates the game (the structural wall does); it
 # produces the report. The judge sees the keeper's [NOW] block on purpose —
@@ -330,7 +330,7 @@ def judge_user(
     return "\n\n".join(parts)
 
 
-# --- M3: the spine generation call (schema-validated, the story spine) ------------
+# --- M3: the spine generation call (schema-validated) -------------------------
 # The pre-authored adventure is the default; this is the generated-spine path.
 
 SPINE_GEN_SYSTEM = (

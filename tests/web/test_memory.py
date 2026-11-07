@@ -1,4 +1,4 @@
-"""M5 acceptance (milestone M6): a 50+ turn fake-LLM session where the early
+"""M5 acceptance: a 50+ turn fake-LLM session where the early
 turns' facts still shape the late game, the context stays bounded, and a
 checkpoint round-trips.
 

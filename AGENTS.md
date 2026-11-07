@@ -43,8 +43,7 @@ Decision log in `docs/roadmap.md`.**
 - **Docs are part of the deliverable.** When behavior, verification, commands,
   or layout changes, update `README.md`, `docs/roadmap.md`, and any affected doc
   (`evals/README.md`, `docs/lxc-runbook.md`). Record decisions/reality changes
-  in the Decision log and update the Decision log. Do not leave stale
-  milestone statuses or commands.
+  in the Decision log. Do not leave stale milestone statuses or commands.
 - **Review-only / docs-only tasks do not run tests.** If the user asks for a
   review or documentation update, inspect the code and cite recorded evidence;
   do not run `make check`, `make test`, pytest, or test-like commands unless

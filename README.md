@@ -199,7 +199,7 @@ ai_rpg/
 | **M5** | Memory: rolling summary, facts/FTS5, spine waypoints, campaign resume | **Code complete; real-model acceptance open** — 52-turn fake session and save/load round-trip pass; the 50+ turn qwen38 memory quiz remains |
 | **M6** | Scoring, conformance adventure, real-model evals, deployment hardening | **Complete (2026-11-01)** — eval reports committed, clean-machine acceptance passed, hardened prod image + LXC runbook |
 
-Details: [the roadmap](docs/roadmap.md) → in-repo `docs/roadmap.md`.
+Details: [the roadmap](docs/roadmap.md).
 
 ## Non-negotiables (from the roadmap)
 

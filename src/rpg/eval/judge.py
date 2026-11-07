@@ -1,4 +1,4 @@
-"""Per-turn judging (milestone M6, eval layer 3).
+"""Per-turn judging (eval layer 3).
 
 Two layers, both cheap to re-run:
 
@@ -36,7 +36,7 @@ __all__ = [
     "structural_verdict",
 ]
 
-# The four eval axes (the evaluation axes): the report's columns.
+# The four evaluation axes: the report's columns.
 AXES: tuple[str, ...] = ("secret_leak", "dice_first", "identity", "beat_progress")
 
 

@@ -1,4 +1,4 @@
-"""M6 conformance adventure (milestone M6, eval layer 1): the test suite plays
+"""M6 conformance adventure (eval layer 1): the test suite plays
 `shadow_crown` end-to-end with a fake LLM and seeded dice — the campaign
 must complete (the finale beat reached) **deterministically**, no model involved.
 

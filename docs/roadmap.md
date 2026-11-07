@@ -2,7 +2,9 @@
 
 This file is the canonical project roadmap: the milestone index, the decision
 log, and the verification history. It is the only roadmap the repository
-depends on.
+depends on. Architecture, evaluation, risks, and open questions are covered by
+the decision log below and by `README.md`, `evals/README.md`, and
+`docs/repo-review-2026-11-07.md`.
 
 > If a decision or reality changes the plan: record it in the Decision log
 > below.
@@ -35,17 +37,17 @@ the same provider code, reachable in-container at `http://ollama:11434/v1`.
 With no `.env` at all, the provider falls back to that Ollama sibling.
 
 **Rationale:**
-1. The evaluation strategy (the evaluation axes) needs a strong baseline to score
+1. The evaluation strategy needs a strong baseline to score
    DM quality against — a weak first model would make "is the architecture
    good" unanswerable. A strong API model for the first playable session
    is the quality signal the project exists to learn from.
-2. The provider layer is provider-agnostic by design (the provider layer):
+2. The provider layer is provider-agnostic by design:
    switching API ↔ local is an env change, zero code — so nothing is
    locked in either direction.
 3. The Proxmox LXC deployment target makes local models the end-state for
-   privacy/cost (roadmap scope); the Ollama sibling being wired at M0
+   privacy/cost; the Ollama sibling being wired at M0
    means that path is exercised continuously, not discovered at M6.
-4. Risk mitigation (roadmap risks, risk 1) is built in: `extract_json`
+4. Risk mitigation (risk 1) is built in: `extract_json`
    ("JSON in prose" + validation) exists in the M0 provider so small
    local models get a usable utility-call path before M3.
 
@@ -59,7 +61,7 @@ box gets a GPU, re-run the local-model table with bigger models.
 `roll(n, sides) -> int` returns the *sum* of n dice, so the parser asks for
 one die at a time; `SeededSource`/`SystemSource`; `RollResult` with a
 canonical byte-stable `str()`), `engine/sheet.py` (**new module** — not in
-the documented layout layout; the character-sheet + XP-table deliverable needed a
+the documented layout; the character-sheet + XP-table deliverable needed a
 home), `engine/rules.py` (`ability_check`/`ability_save`; advantage =
 2d20kh1, disadvantage = 2d20kl1, both together cancel; natural 20 always
 succeeds, natural 1 always fails), `engine/combat.py` (initiative d20 + Dex
@@ -99,14 +101,14 @@ byte-identical under the same seed across two separate container runs
 
 ### M2 — world state, events, context: log is the authority, tables are a view (2026-10-26)
 
-**Decision:** M2 lands the state/memory layout state layer as three engine modules.
+**Decision:** M2 lands the state layer as three engine modules.
 `engine/state.py` — the entity records (`PlayerCharacter` wrapping the M1
 `CharacterSheet`, `Npc`, `Item`, `Quest`, `Location`, `Fact`,
 `CombatantRecord`, `CombatState`) plus `WorldState.apply_event(kind,
 payload, turn)`, the **single validated, clamped writer** (every event kind
 checks names/ranges/known-exits/known-combatants and rejects with
 `ValueError`; no other code path mutates the world). `engine/events.py` —
-the SQLite schema (state/memory layout: `pc`, `npc`, `item`, `quest`, `location`, `fact`,
+the SQLite schema (tables: `pc`, `npc`, `item`, `quest`, `location`, `fact`,
 append-only `event`, per-turn `snapshot`, `message` with role restricted to
 user/narration), `WorldDB` and `rebuild_world`. `engine/context.py` — the
 context builder (stable head + volatile tail + trimmed transcript +
@@ -140,7 +142,7 @@ context builder (stable head + volatile tail + trimmed transcript +
    legitimately re-name the identical state — the guarantee is presence
    per turn, not distinctness. The log must be contiguous from seq 1
    (`rebuild_world` rejects gaps/duplicates).
-4. **Context builder** per state/memory layout: stable head = DM identity + 5e rules
+4. **Context builder**: stable head = DM identity + 5e rules
    summary + GM standards + keeper discipline (templates in
    `llm/prompts.py`, the only home for prompts). Volatile tail = the state
    block headed *"Current game state (engine-provided, not spoken by any
@@ -153,7 +155,7 @@ context builder (stable head + volatile tail + trimmed transcript +
    `rpg.cli dump-context` print the metered layout.
 5. **Milestone marker moved to "M2" now** (the M1 log said it would wait
    for M3): the world-state endpoints (`GET /api/world`) and the
-   dump-context surface are M2 deliverables by milestone M6; the turn pipeline, dice
+   dump-context surface are M2 deliverables; the turn pipeline, dice
    frames and the static-page placeholders remain M3.
 6. **M2 CLI** (`rpg.cli new [name] [--hp] [--db]`, `turn TEXT NARRATION`,
    `world-status`, `dump-context`) is a headless, no-LLM commit surface:
@@ -194,7 +196,7 @@ the narration must reflect verbatim; `start_combat`/`end_combat` bridge
 the M1 `Combat` object — the whole encounter is resolved by the engine
 and committed attack-by-attack (`combat_begin/attack/turn`), and
 `end_combat` *derives* the claimed outcome from the committed state and
-rejects mismatches (defeat wakes the PC at 1 HP). `dm/loop.py` — the the turn pipeline
+rejects mismatches (defeat wakes the PC at 1 HP). `dm/loop.py` — the turn
 pipeline per turn: arbitrate (meta short-circuit) → intent (one advisory
 `extract_json` call, never fatal) → context (M2 builder + spine `[NOW]`
 block in the stable head) → bounded DM tool loop (8 rounds) → single
@@ -298,7 +300,7 @@ human browser acceptance; the recoverable memory warning is tracked under M5.
 
 ### M4 — backstops + anti-hack: structural wall, bounded Stop-form re-asks, red-line suite (2026-10-28)
 
-**Decision:** M4 lands the the anti-hack layer anti-hack layer as `engine/backstops.py`
+**Decision:** M4 lands the anti-hack layer as `engine/backstops.py`
 (six structural checks — no fiction reading), a bounded Stop-form re-ask
 loop inside the turn pipeline (`dm/loop.py`, step 6), a strengthened
 keeper prompt (`llm/prompts.py`), per-NPC knowledge scoping in the state
@@ -369,7 +371,7 @@ identity re-ask, rewritten after 1 re-ask, clean line committed).
 
 ### M5 — memory + persistence: FTS5 recall, folded summary, /new /save /load (2026-10-29)
 
-**Decision:** M5 lands the state/memory layout memory layer as `dm/memory.py` (the
+**Decision:** M5 lands the memory layer as `dm/memory.py` (the
 keeper's recall, folded on every turn), session handling in
 `engine/events.py` (`WorldDB.recall_facts`, `backup_to`/`restore_from`),
 `session.py` (the single owner of `/new /save /load` — engine and web run
@@ -427,7 +429,7 @@ through it), and the web session endpoints.
    arbiter's meta verbs and the web endpoints (`/api/new /api/save
    /api/load /api/sessions`) both run through `session.py`.
 6. **The memory quiz plants a fact every five turns, not 5/20/40**
-   (deviation from the milestone M6 bullet): with ten facts on record by turn 50 the
+   (deviation from the milestone bullet): with ten facts on record by turn 50 the
    bounded recent-tail (the last five) no longer shows the turn-5 fact —
    only the FTS5 recall for the turn-50 line can bring it back. The test
    asserts both directions: the recalled turn-5 fact is in the state block,
@@ -465,7 +467,7 @@ unverified; the 50+ turn acceptance was not attempted.
 
 **Follow-ups:** address repeated `note` tool calls and summary/fact output
 truncation before a 50+ turn real-model quiz. The meter remains the char
-heuristic (a real tokenizer is the state/memory layout upgrade); broader per-model memory
+heuristic (a real tokenizer is a future upgrade); broader per-model memory
 behavior remains an M6 eval-harness case.
 
 **Addendum (2026-10-29): the dev volume outlives the engine code.** A
@@ -506,7 +508,7 @@ eval harness (`src/rpg/eval/`), and a hardened deployable image
    HP-recovery door, engine-validated, clamped, event-logged.
 5. **The eval harness has two independent layers per committed turn**:
    the M4 wall re-run (deterministic, model-free) and a strict-JSON judge
-   call on the four the evaluation layer axes (secret leak, dice-first miss, identity
+   call on the four evaluation axes (secret leak, dice-first miss, identity
    drift, beat progress). The judge sees the keeper `[NOW]` block on
    purpose (earned reveal vs leak), never gates the game, and its
    failures are recorded per turn (`judge_error`) — a silent `n/a` would
@@ -596,7 +598,7 @@ convenience. The felt need is covered for v1 by `/load` and `/new`.
 **Revisit only if players actually ask.** Safe implementation when it
 comes: `snapshot_for(turn-1)` restore + log-tail truncation + table
 resync, gated by a red-line test asserting replay-after-undo is
-byte-identical (the M2 property test). 
+byte-identical (the M2 property test).
 
 ### Verification audit (2026-10-31)
 

@@ -1,6 +1,6 @@
 """Context builder (roadmap M2, extended by M5): stable head + volatile tail.
 
-Layout (Loreweaver's split, the state/memory layout):
+Layout (Loreweaver's split):
 - stable head (system message, cacheable): DM identity, rules summary,
   GM-quality standards, keeper-discipline block, spine [NOW] block (M3),
   rolling campaign summary (M5: `world.summary`, folded by the memory step

@@ -1,4 +1,4 @@
-"""The scripted players (milestone M6, eval layer 3).
+"""The scripted players (eval layer 3).
 
 Each archetype is a fixed list of player lines — *intent, never outcome*
 (C4) — that one harness run feeds to the real DM in order. The judge scores

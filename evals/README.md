@@ -40,7 +40,7 @@ To run one archetype, set `--archetype explorer` (or `talker` / `saboteur`).
 1. **Structural (the M4 wall, re-run on committed narration)** —
    deterministic, model-free: forgery, contradiction, identity, secret
    leak. This is the verdict layer.
-2. **Judge model** — one strict-JSON call per turn on the four the evaluation layer axes
+2. **Judge model** — one strict-JSON call per turn on the four evaluation axes
    (`secret_leak`, `dice_first`, `identity`, `beat_progress`). It sees the
    keeper `[NOW]` block on purpose, to tell an earned reveal from a leak.
    It never gates the game; its failures are recorded per turn

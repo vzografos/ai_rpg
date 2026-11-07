@@ -1,4 +1,4 @@
-"""Story spine (the story spine, M3): the hidden scaffold that keeps the story honest.
+"""Story spine (M3): the hidden scaffold that keeps the story honest.
 
 Shape (ODM's, simplified):
     StorySpine {

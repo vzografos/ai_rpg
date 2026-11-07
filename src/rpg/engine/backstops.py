@@ -47,7 +47,7 @@ __all__ = [
     "fallback_narration",
 ]
 
-MAX_BACKSTOP_REASKS = 3  # bounded Stop-form correction loop (the bounded correction loop)
+MAX_BACKSTOP_REASKS = 3  # bounded Stop-form correction loop
 
 BACKSTOP_KINDS = (
     "forgery",

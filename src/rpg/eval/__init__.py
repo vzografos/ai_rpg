@@ -1,4 +1,4 @@
-"""M6 play-quality eval (milestone M6, eval layer 3).
+"""M6 play-quality eval (eval layer 3).
 
 `archetypes` holds the scripted players; `judge` scores each committed turn
 (structurally, and optionally with a second model); `run` plays one session

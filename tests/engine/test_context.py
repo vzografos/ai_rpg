@@ -1,6 +1,6 @@
 """Context builder tests (M2): stable head, volatile tail, trimming, metering.
 
-Pins the state/memory layout layout — including the keeper-only guarantees (NPC
+Pins the state/memory layout — including the keeper-only guarantees (NPC
 agendas never enter the volatile tail) and the bounded-meter behavior.
 """
 

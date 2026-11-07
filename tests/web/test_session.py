@@ -1,4 +1,4 @@
-"""M3 acceptance (milestone M6): a 10-turn fake-LLM pipeline session through the
+"""M3 acceptance: a 10-turn fake-LLM pipeline session through the
 web surface, plus the kill-and-restart identity check.
 
 The fake DM is scripted per turn (tool rounds + narration); the dice are

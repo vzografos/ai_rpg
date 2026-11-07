@@ -3,7 +3,7 @@
 ## Scope and method
 
 A full static review of the current checkout against the canonical roadmap in
-`docs/roadmap.md`.
+[`docs/roadmap.md`](roadmap.md).
 
 **No tests or containers were run for this review.** Every completion claim
 below cites evidence already recorded in `docs/roadmap.md`, `evals/reports/`,

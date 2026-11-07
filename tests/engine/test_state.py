@@ -1,7 +1,7 @@
 """WorldState unit tests (M2): entity validation and the apply_event contract.
 
 apply_event is the single writer — every clamp and rejection pinned here is
-what keeps "the LLM never owns numbers" structural (the anti-hack layer).
+what keeps "the LLM never owns numbers" structural.
 """
 
 from __future__ import annotations

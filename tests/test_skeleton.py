@@ -1,4 +1,4 @@
-"""Skeleton layout pin (M0): every module from the documented layout exists and imports,
+"""Skeleton layout pin (M0): every documented module exists and imports,
 the static page ships in-repo, and the pre-authored adventure is valid JSON.
 
 M1+ tests replace this as the modules grow — keep this file as the layout
@@ -75,11 +75,12 @@ def test_docker_layer_exists():
 
 
 @pytest.mark.skipif(IN_IMAGE, reason="repo docs ship at the host checkout, not in the image")
-def test_repo_documents_where_the_roadmap_lives():
-    pointer = "docs/Roadmap"
+def test_repo_documents_the_roadmap():
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     agents = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    docs = (REPO_ROOT / "docs" / "roadmap.md").read_text(encoding="utf-8")
-    assert pointer in readme
-    assert pointer in agents
-    assert pointer in docs
+    docs_path = REPO_ROOT / "docs" / "roadmap.md"
+    docs = docs_path.read_text(encoding="utf-8")
+    assert docs_path.exists()
+    assert "docs/roadmap.md" in readme
+    assert "docs/roadmap.md" in agents
+    assert docs.startswith("# Roadmap")
