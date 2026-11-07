@@ -1,4 +1,5 @@
 # All targets run INSIDE the container (constraint C1: host needs only Docker).
+# Port publishing is loopback-only by default; set RPG_BIND_ADDR to expose.
 COMPOSE := docker compose -f docker/compose.yml
 
 .PHONY: build up down logs test lint check shell pull-model prod prod-down
@@ -6,10 +7,10 @@ COMPOSE := docker compose -f docker/compose.yml
 build: ## Build the self-contained image
 	$(COMPOSE) --profile dev build app
 
-up: ## Dev server on :8080 (bind-mounts src, syncs deps in-container, reload)
+up: ## Dev server on 127.0.0.1:8080 (set RPG_BIND_ADDR to expose)
 	$(COMPOSE) --profile dev up --build app
 
-prod: ## Hardened deployment on :8080 (read-only rootfs, non-root, data volume)
+prod: ## Hardened deployment on 127.0.0.1:8080 (set RPG_BIND_ADDR to expose)
 	$(COMPOSE) --profile prod up -d --build prod
 
 prod-down: ## Stop the hardened deployment

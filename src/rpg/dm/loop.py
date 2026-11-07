@@ -274,7 +274,7 @@ class TurnPipeline:
                 events.append(WorldEvent(turn=turn, kind="spine_delta", payload=payload))
             if advances:
                 beat = spine.active_beat
-                result.beat = beat.to_dict() if beat is not None else None
+                result.beat = beat.player_dict() if beat is not None else None
         # 8b. memory (M5): the non-blocking upkeep, pre-commit — its events
         # ride the same turn transaction. Order: refresh (a chapter close),
         # facts (the turn just played), fold last (it covers this turn).
@@ -494,7 +494,7 @@ class TurnPipeline:
                             "quest_lines": world.spine.quest_lines(),
                             "beat": result.beat
                             if result.beat is not None
-                            else (active.to_dict() if active is not None else None),
+                            else (active.player_dict() if active is not None else None),
                             "completed": [b.text for b in world.spine.beats if b.status == "done"],
                         }
                     ),
@@ -504,7 +504,7 @@ class TurnPipeline:
             result.frames.append(("dice", json.dumps(die)))
         for effect in result.tool_effects:
             result.frames.append(("tool", json.dumps(effect)))
-        result.frames.append(("state", json.dumps(world.to_dict())))
+        result.frames.append(("state", json.dumps(world.to_player_dict())))
         result.frames.append(("narration", json.dumps({"text": result.narration})))
         if result.was_meta:
             result.frames.append(

@@ -815,6 +815,35 @@ class WorldState:
             "spine": None if self.spine is None else self.spine.to_dict(),
         }
 
+    def to_player_dict(self) -> dict[str, Any]:
+        """The player-safe projection: canonical state minus keeper-only fields.
+
+        Browser-facing surfaces (the `/api/world` family and the `state` SSE
+        frame) use this shape. NPC agendas/notes, the PC's keeper notes, and
+        the spine's cast, events, and beat annotations never cross the wire;
+        `to_dict()` stays the canonical fingerprint/replay form.
+        """
+        data = self.to_dict()
+        if data["pc"] is not None:
+            data["pc"].pop("notes", None)
+        for npc in data["npcs"].values():
+            npc.pop("agenda", None)
+            npc.pop("notes", None)
+        spine = data.get("spine")
+        if spine is not None:
+            data["spine"] = {
+                "beats": [
+                    {
+                        "text": beat["text"],
+                        "status": beat["status"],
+                        "act": beat["act"],
+                        "waypoints": beat["waypoints"],
+                    }
+                    for beat in spine.get("beats", [])
+                ]
+            }
+        return data
+
     def fingerprint(self) -> str:
         """sha256 of the canonical JSON — names the world exactly."""
         canonical = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))

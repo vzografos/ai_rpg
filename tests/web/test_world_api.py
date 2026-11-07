@@ -1,4 +1,4 @@
-"""Web world tests (M2): /api/world and /api/dump-context.
+"""Web world tests (M2): player-safe /api/world and debug /api/dump-context.
 
 The endpoints read the world fresh from the event log on each request (the
 M2 authority), so a world committed out-of-band (e.g. by the debug CLI in
@@ -101,9 +101,22 @@ def test_world_api_reports_the_committed_world(monkeypatch: MonkeyPatch) -> None
     assert world["pc"]["hp"] == 12
     assert world["npcs"]["Brenna"]["location"] == "The tavern"
     assert "Find the shadow crown" in world["quests"]
+    # Keeper-only fields are stripped from the browser-facing projection.
+    assert "agenda" not in world["npcs"]["Brenna"]
+    assert "notes" not in world["npcs"]["Brenna"]
+
+
+def test_dump_context_is_disabled_by_default(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.delenv("RPG_DEBUG", raising=False)
+    with web_client(monkeypatch, FakeProvider()) as c:
+        seed_world(db_path(monkeypatch))
+        response = c.get("/api/dump-context")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"]
 
 
 def test_dump_context_endpoint_404s_without_a_world(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("RPG_DEBUG", "1")
     with web_client(monkeypatch, FakeProvider()) as c:
         response = c.get("/api/dump-context")
     assert response.status_code == 404
@@ -111,6 +124,7 @@ def test_dump_context_endpoint_404s_without_a_world(monkeypatch: MonkeyPatch) ->
 
 
 def test_dump_context_endpoint_serves_the_metered_dump(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("RPG_DEBUG", "1")
     with web_client(monkeypatch, FakeProvider()) as c:
         seed_world(db_path(monkeypatch))
         response = c.get("/api/dump-context")

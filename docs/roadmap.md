@@ -751,3 +751,33 @@ triples, on turn 27).
 
 Full detail, completion matrix, and post-v1 recommendations:
 [`docs/repo-review-2026-11-07.md`](repo-review-2026-11-07.md).
+
+### Security hardening — 2026-11-07
+
+**Decision:** scrub internal infrastructure identifiers and personal author
+metadata from the repository and its history, and make the default runtime
+surface loopback-only. The audit found no hardcoded IPs, private keys, cloud
+tokens, or database dumps; it did find a documented internal vLLM hostname and
+working-looking key, a container hostname/root deploy path, and an
+unauthenticated debug surface.
+
+**Changes:**
+
+- Docs use placeholders only; real values stay in `.env` (ignored, never
+  baked into the image).
+- `/api/status` no longer returns the provider `base_url`.
+- Browser-facing world payloads (`/api/world`, `/api/new`, `/api/load`, and
+  the `state` SSE frame) use `WorldState.to_player_dict()`, which strips NPC
+  agendas/notes, PC keeper notes, and spine cast/events/beat detail. The
+  `beat`/`quest` frames and `/api/spine` use `Beat.player_dict()`.
+- `/api/dump-context` returns 404 unless `RPG_DEBUG=1`; dev compose sets it,
+  prod does not.
+- Compose publishes `:8080` on `127.0.0.1` by default; `RPG_BIND_ADDR` opts
+  into LAN exposure (use an authenticating proxy).
+- All git history was rewritten: author/committer identity neutralized,
+  timezone normalized to UTC, identifiers replaced; commit hashes changed.
+  No remote is configured.
+
+**Verified:** in-container `make check` on 2026-11-07: Ruff clean; 410 passed,
+2 skipped; 100% engine statement coverage. A full-object history scan after
+the rewrite found no remaining identifiers or personal author metadata.

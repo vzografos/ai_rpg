@@ -2,7 +2,8 @@
 
 M6 surface:
     GET  /                   the single static page (chat pane + sidebar, vanilla JS)
-    GET  /api/status         app + model info + the scoring panel (milestone M6)
+    GET  /api/status         app + model info + the scoring panel (milestone M6;
+                             the provider endpoint stays server-side)
     GET  /api/ping           one-shot LLM round-trip ("LLM says hello")
     POST /api/new            start a session: seed the pre-authored adventure
     POST /api/save           checkpoint the campaign (named save; default turn-N)
@@ -11,8 +12,8 @@ M6 surface:
     POST /action             player input -> the turn pipeline -> SSE frames
     GET  /api/spine          the player-safe spine projection (quest log)
     GET  /api/messages       the committed transcript (restore on reload)
-    GET  /api/world          the committed world (rebuilt from the event log)
-    GET  /api/dump-context   the metered context dump (debug)
+    GET  /api/world          the player-safe committed world (event-log rebuild)
+    GET  /api/dump-context   the metered context dump (debug; RPG_DEBUG=1 only)
 
 The frame grammar (sse_frame) is the contract: narration, dice, state, quest,
 beat, tool, error, done. The browser, the in-container debug CLI, and the test
@@ -67,6 +68,11 @@ def _dice_source() -> SeededSource | SystemSource:
         except ValueError:
             pass
     return SystemSource()
+
+
+def _debug_enabled() -> bool:
+    """Debug endpoints are opt-in: set RPG_DEBUG=1 (the dev compose service does)."""
+    return os.environ.get("RPG_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 @asynccontextmanager
@@ -154,7 +160,6 @@ async def status(request: Request) -> dict[str, Any]:
         "version": __version__,
         "milestone": "M6",
         "model": provider.config.model,
-        "base_url": provider.config.base_url,
         "world": bool(world is not None and not world.is_empty),
         "progress": _scoring_panel(world),
     }
@@ -191,7 +196,7 @@ async def new_session(body: NewIn, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     request.app.state.world = world
     request.app.state.pipeline = None
-    return {"ok": True, "turn": world.turn, "world": world.to_dict()}
+    return {"ok": True, "turn": world.turn, "world": world.to_player_dict()}
 
 
 @app.post("/api/save")
@@ -234,7 +239,7 @@ async def load_session(body: LoadIn, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     request.app.state.world = world
     request.app.state.pipeline = None
-    return {"ok": True, "name": name, "turn": world.turn, "world": world.to_dict()}
+    return {"ok": True, "name": name, "turn": world.turn, "world": world.to_player_dict()}
 
 
 @app.get("/api/sessions")
@@ -278,7 +283,7 @@ async def spine_projection(request: Request) -> dict[str, Any]:
     active = spine.active_beat
     return {
         "quest_lines": spine.quest_lines(),
-        "beat": active.to_dict() if active is not None else None,
+        "beat": active.player_dict() if active is not None else None,
         "completed": [beat.text for beat in spine.beats if beat.status == "done"],
         "is_over": spine.is_over,
     }
@@ -298,14 +303,14 @@ async def messages(request: Request) -> dict[str, Any]:
 
 @app.get("/api/world")
 async def world_status(request: Request) -> dict[str, Any]:
-    """The committed world, rebuilt from the event log (the M2 authority)."""
+    """The player-safe committed world, rebuilt from the event log (M2 authority)."""
     db: WorldDB = request.app.state.db
     world = db.load_world()
     if world is None:
         return {"world": None, "events": 0, "last_snapshot": None}
     last = db.last_snapshot()
     return {
-        "world": world.to_dict(),
+        "world": world.to_player_dict(),
         "events": db.event_count(),
         "last_snapshot": {"turn": last[0], "hash": last[1]} if last else None,
     }
@@ -314,6 +319,8 @@ async def world_status(request: Request) -> dict[str, Any]:
 @app.get("/api/dump-context")
 async def dump_context_endpoint(request: Request) -> PlainTextResponse:
     """The metered context dump (stable head + volatile tail), for debugging."""
+    if not _debug_enabled():
+        raise HTTPException(status_code=404, detail="not found")
     world = _live_world(request)
     if world.is_empty:
         raise HTTPException(

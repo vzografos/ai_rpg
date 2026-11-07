@@ -99,6 +99,7 @@ def session_client(monkeypatch: MonkeyPatch, fake: FakeProvider) -> TestClient:
     monkeypatch.setattr(app_module, "build_provider", lambda env=None: fake)
     monkeypatch.setenv("RPG_DATA", tempfile.mkdtemp(prefix="rpg-memory-"))
     monkeypatch.setenv("RPG_SEED", "42")  # reproducible dice for the acceptance run
+    monkeypatch.setenv("RPG_DEBUG", "1")  # the context meter is a debug surface
     return TestClient(app_module.app)
 
 

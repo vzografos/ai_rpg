@@ -160,6 +160,15 @@ class Beat:
             "detail": self.detail,
         }
 
+    def player_dict(self) -> dict[str, Any]:
+        """The player-safe projection: no keeper-only `detail`."""
+        return {
+            "text": self.text,
+            "status": self.status,
+            "act": self.act,
+            "waypoints": [waypoint.to_dict() for waypoint in self.waypoints],
+        }
+
 
 @dataclass
 class CastMember:

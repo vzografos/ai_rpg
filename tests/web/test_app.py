@@ -42,10 +42,12 @@ def parse_sse(body: str) -> dict[str, list[str]]:
     return frames
 
 
-def start_session(client: TestClient) -> None:
+def start_session(client: TestClient) -> dict:
     response = client.post("/api/new", json={})
     assert response.status_code == 200, response.text
-    assert response.json()["world"]["pc"]["name"] == "Kellan Voss"
+    body = response.json()
+    assert body["world"]["pc"]["name"] == "Kellan Voss"
+    return body
 
 
 # --- the static page + status -----------------------------------------------------
@@ -74,7 +76,7 @@ def test_status_reports_model_and_no_world(monkeypatch: MonkeyPatch) -> None:
     assert body["app"] == "ai_rpg"
     assert body["milestone"] == "M6"
     assert body["model"] == "test-model"
-    assert body["base_url"] == "fake://test"
+    assert "base_url" not in body  # the provider endpoint stays server-side
     assert body["world"] is False
     assert body["progress"] is None  # no sheet yet (M6: the progress panel)
 
@@ -117,11 +119,19 @@ def test_ping_upstreams_502_on_provider_failure(monkeypatch: MonkeyPatch) -> Non
 
 def test_new_seeds_the_adventure_and_its_spine(monkeypatch: MonkeyPatch) -> None:
     with web_client(monkeypatch, FakeProvider()) as c:
-        start_session(c)
+        created = start_session(c)
         world = c.get("/api/world").json()["world"]
         spine = c.get("/api/spine").json()
         messages = c.get("/api/messages").json()["messages"]
     assert world["pc"]["name"] == "Kellan Voss"
+    # Browser-facing payloads are player-safe: keeper-only fields are absent.
+    assert "agenda" not in created["world"]["npcs"]["Brenna"]
+    assert "notes" not in created["world"]["pc"]
+    assert "cast" not in created["world"]["spine"]
+    assert "events" not in created["world"]["spine"]
+    assert "detail" not in created["world"]["spine"]["beats"][0]
+    assert "agenda" not in world["npcs"]["Brenna"]
+    assert "detail" not in spine["beat"]
     assert "The tavern" in world["locations"]
     assert "Candle of Vell" in world["items"]
     assert world["spine"] is not None
@@ -184,6 +194,10 @@ def test_action_runs_the_turn_pipeline(monkeypatch: MonkeyPatch) -> None:
     state = json.loads(frames["state"][0])
     assert state["turn"] == 2
     assert state["pc"]["name"] == "Kellan Voss"
+    # The browser-facing state frame never carries keeper-only fields.
+    assert all("agenda" not in npc for npc in state["npcs"].values())
+    assert "cast" not in state["spine"]
+    assert "detail" not in state["spine"]["beats"][0]
     done = json.loads(frames["done"][0])
     assert done["turn"] == 1
     assert done["tool_calls"] == ["roll_check", "note"]

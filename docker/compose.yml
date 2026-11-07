@@ -31,8 +31,13 @@ services:
     profiles: [dev]
     # Sync deps from the in-image lockfile, then serve with reload.
     entrypoint: ["/bin/sh", "-c", "uv sync --no-dev --frozen && exec uv run uvicorn rpg.web.app:app --host 0.0.0.0 --port 8080 --reload"]
+    environment:
+      RPG_DATA: /app/data
+      RPG_DEBUG: "1"
+    # Safe by default: loopback only. Set RPG_BIND_ADDR=<lan-ip> (or 0.0.0.0)
+    # to expose it, and put an authenticating reverse proxy in front.
     ports:
-      - "8080:8080"
+      - "${RPG_BIND_ADDR:-127.0.0.1}:8080:8080"
 
   test:
     <<: *app-base
@@ -68,8 +73,10 @@ services:
       RPG_DATA: /app/data
     volumes:
       - rpg-data:/app/data
+    # Safe by default: loopback only. Set RPG_BIND_ADDR=<lan-ip> (or 0.0.0.0)
+    # to expose it, and put an authenticating reverse proxy in front.
     ports:
-      - "8080:8080"
+      - "${RPG_BIND_ADDR:-127.0.0.1}:8080:8080"
     # Runs the image CMD (the baked venv's interpreter — see Dockerfile: no
     # `uv run` at runtime, because uv wants a writable cache a read-only
     # rootfs correctly refuses; the clean-machine acceptance found this).

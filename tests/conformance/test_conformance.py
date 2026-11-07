@@ -239,6 +239,6 @@ def test_conformance_replay_is_byte_identical(monkeypatch: MonkeyPatch) -> None:
         restarted = db.load_world()
         replayed = rebuild_world(db.events())
         replayed.turn = restarted.turn  # the session concept the DB assigns
-    assert restarted.to_dict() == live, "restart replay diverged from the live world"
+    assert restarted.to_player_dict() == live, "restart replay diverged from the live world"
     assert replayed.fingerprint() == restarted.fingerprint()
     assert replayed.to_dict() == restarted.to_dict()

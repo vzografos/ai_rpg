@@ -12,9 +12,13 @@ and an append-only event log is the single source of truth.
 **v1 is feature-complete and deployable.** M0–M4 and M6 are complete; M5's
 code is complete, but its 50+ turn real-model memory acceptance is still open.
 
-- Latest recorded gate: **409 passed, 2 skipped, 100% engine statement
-  coverage** (`make check` in Docker, 2026-10-31). The two skips are repo-doc
+- Latest recorded gate: **410 passed, 2 skipped, 100% engine statement
+  coverage** (`make check` in Docker, 2026-11-07). The two skips are repo-doc
   layout checks intentionally absent from the test image.
+- Security hardening (2026-11-07): docs use placeholders, `/api/status` no
+  longer exposes the provider endpoint, browser-facing world payloads are
+  player-safe, `/api/dump-context` is opt-in (`RPG_DEBUG=1`), compose binds
+  loopback by default, and git history was scrubbed.
 - Real-model eval reports are committed in [`evals/reports/`](evals/reports/):
   qwen38, 2026-11-01, 35/35 turns structurally clean (judge 34/35).
 - The hardened production image passed a clean-machine acceptance: image
@@ -58,15 +62,18 @@ make pull-model model=llama3.1:8b
 # .env: LLM_BASE_URL=http://ollama:11434/v1  LLM_API_KEY=ollama  LLM_MODEL=llama3.1:8b
 ```
 
-**vLLM / self-hosted gateway:** any OpenAI-compatible endpoint works. The
-known-good live config is the local vLLM server:
+**vLLM / self-hosted gateway:** any OpenAI-compatible endpoint works. Put the
+real endpoint and key in `.env` (ignored; never commit it):
 
 ```sh
 # .env:
-LLM_BASE_URL=http://your-vllm-host:8080/v1
+LLM_BASE_URL=http://your-vllm-host:8000/v1
 LLM_API_KEY=<your-key>
-LLM_MODEL=qwen38
+LLM_MODEL=<your-model>
 ```
+
+The repo's examples use placeholders only. Real endpoints, keys, hostnames,
+and deploy paths belong in `.env` or your secret manager.
 
 Other targets: `make test`, `make lint`, `make logs`, `make shell`
 (debug shell — `uv run python -m rpg.cli ping`), `make prod` /
@@ -116,6 +123,12 @@ Committed reports live in `evals/reports/`.
 ship the image with `make build` + `docker save`, load it on the CT, configure
 `.env`, and run the hardened `prod` service (read-only rootfs, non-root,
 `no-new-privileges`, SQLite on the `rpg-data` volume).
+
+The compose services publish `:8080` on loopback by default. For remote
+access, use an SSH tunnel (`ssh -L 8080:localhost:8080 <user>@<host>`) or set
+`RPG_BIND_ADDR=<lan-ip>` and put an authenticating reverse proxy in front.
+Debug endpoints (`/api/dump-context`) are off in prod; set `RPG_DEBUG=1` only
+for a temporary debugging run.
 
 ## Layout
 

@@ -96,7 +96,6 @@
     <div><span class="dot"></span><span id="llm-state">checking&hellip;</span></div>
     <p id="llm-hello"></p>
     <div class="kv" style="margin-top:8px"><span>model</span><b id="model">&mdash;</b></div>
-    <div class="kv"><span>endpoint</span><b id="base-url">&mdash;</b></div>
   </section>
   <section>
     <h2>Character</h2>
@@ -244,14 +243,14 @@ async function boot() {
   try {
     const st = await j('/api/status');
     document.getElementById('model').textContent = st.model;
-    document.getElementById('base-url').textContent = st.base_url;
     document.getElementById('milestone').querySelector('b').textContent =
       st.milestone + ' · v' + st.version;
     renderProgress(st.progress);
     hasWorld = st.world;
     newSessionBtn.disabled = st.world;
   } catch (e) {
-    document.getElementById('base-url').textContent = String(e);
+    document.getElementById('llm-state').textContent = 'status error';
+    document.getElementById('llm-hello').textContent = e.message || String(e);
   }
   try {
     const p = await j('/api/ping');

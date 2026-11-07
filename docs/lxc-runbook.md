@@ -48,7 +48,7 @@ so do not pass `--build` on the CT.
 `.env` — fill in the model endpoint (any OpenAI-compatible server):
 
 ```sh
-LLM_BASE_URL=http://<host-or-sibling>:8080/v1
+LLM_BASE_URL=http://<host-or-sibling>:8000/v1
 LLM_API_KEY=...
 LLM_MODEL=...
 LLM_TIMEOUT=120
@@ -70,6 +70,12 @@ curl -s localhost:8080/api/status | head -c 200   # expect: milestone + progress
 The `prod` service is hardened: non-root (uid 10001), read-only rootfs,
 `/tmp` as tmpfs, `no-new-privileges`, no bind mounts, and the SQLite DB on the
 `rpg-data` named volume (the only state).
+
+It publishes on loopback by default. To reach it from your workstation, use an
+SSH tunnel (`ssh -L 8080:localhost:8080 <user>@<ct-host>`) or set
+`RPG_BIND_ADDR=<ct-lan-ip>` when starting Compose and put an authenticating
+reverse proxy in front — never expose :8080 directly. Debug endpoints are off
+in prod; set `RPG_DEBUG=1` only for a temporary debugging session.
 
 ## 5. Operate
 
@@ -96,5 +102,6 @@ then the same `up -d --no-build prod` (loses the world).
 ## 6. Verify after any change
 
 1. `curl -s localhost:8080/api/status` → JSON with `"milestone"` and `progress`.
-2. Open `http://<ct>:8080/` in a browser → the single-page app loads.
+2. From your workstation, tunnel `ssh -L 8080:localhost:8080 <user>@<ct-host>`
+   and open `http://localhost:8080/` — the single-page app loads.
 3. Play one turn; reload; the session resumes (proves the volume works).

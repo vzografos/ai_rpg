@@ -49,15 +49,21 @@ Decision log in `docs/roadmap.md`.**
   review or documentation update, inspect the code and cite recorded evidence;
   do not run `make check`, `make test`, pytest, or test-like commands unless
   explicitly asked.
-- Known-good live LLM config (M0 verified end-to-end): the local vLLM server
-  — `LLM_BASE_URL=http://your-vllm-host:8080/v1`, `LLM_API_KEY=<your-key>`,
-  `LLM_MODEL=qwen38` (fill into `.env`).
+- **Secrets and exposure.** `.env` is ignored and never baked into the image.
+  Real endpoints, keys, hostnames, and deploy paths belong only in `.env` or
+  a secret manager; docs/tests/commit messages use `<placeholders>`. The
+  compose services publish :8080 on loopback by default — set `RPG_BIND_ADDR`
+  explicitly to expose them. Debug endpoints require `RPG_DEBUG=1` (dev
+  compose sets it; prod does not).
+- Known-good live LLM config: any OpenAI-compatible endpoint. The M0 check
+  used a local vLLM server, but its endpoint/key/model are not committed; fill
+  `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` into `.env`.
 
 ## Verification commands (all in-container)
 
 ```sh
 make check    # lint + tests — the M0+ acceptance gate
 make test     # pytest only
-make up       # dev server on :8080
+make up       # dev server on 127.0.0.1:8080
 make shell    # debug shell: uv run python -m rpg.cli ping
 ```
