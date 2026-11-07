@@ -1,8 +1,8 @@
 """In-container debug CLI (the documented layout: cli.py).
 
 Deliberately secondary to the web UI (constraint C2) — kept for `docker exec`
-debugging. It shares the same provider core and will grow the same commands
-as the arbiter's meta verbs (/status /roll /save /load /help) land in M4.
+debugging. It shares the same provider core, session module, and meta surface
+as the web app (`/status /roll /save /load /new /help` equivalents).
 
 Usage (inside the container):
     uv run python -m rpg.cli status

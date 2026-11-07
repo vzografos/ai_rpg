@@ -1,13 +1,15 @@
-# M6 eval reports
+# Real-model eval reports (M6)
 
 The real-model eval harness (`src/rpg/eval/`) plays three scripted
-archetypes against the live DM and records what actually happened.
+archetypes against the live DM and records what actually happened. The
+committed reports in `evals/reports/` are **qwen38 snapshots from 2026-11-01**;
+they are historical evidence, not a live dashboard.
 
 ## Run it
 
 ```sh
 make check                       # gate first (lint + hermetic tests)
-docker compose -f docker/compose.yml run -d --name rpg-eval \
+docker compose -f docker/compose.yml --profile test run -d --name rpg-eval \
   --entrypoint sh -e LLM_TIMEOUT=600 test -c \
   "uv sync --no-dev --frozen >/dev/null 2>&1 && \
    uv run python -u -m rpg.eval.run --archetype all --out /app/evals/reports 2>&1; \
@@ -18,7 +20,12 @@ docker cp rpg-eval:/app/evals/reports/. evals/reports/
 
 The model comes from `.env` (`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`).
 Each archetype gets a fresh session (fresh DB) so runs do not contaminate
-each other.
+each other. Add `--no-llm-judge` to run the deterministic structural layer
+only (no judge model, faster and cheaper). The harness is **report-only**:
+`rpg.eval.run` prints the structural-finding count and exits 0 even when
+findings exist, so it is not a CI gate — read the reports.
+
+To run one archetype, set `--archetype explorer` (or `talker` / `saboteur`).
 
 ## The three archetypes
 
@@ -68,7 +75,7 @@ What the run taught:
   4/9/15) and dice-first misses where narration asserted outcomes the
   engine never committed ("the wight's death and 150 XP") in prose the
   forgery checker does not treat as a number claim. Paraphrase-level
-  leakage is the concrete M7 target this eval surfaced.
+  leakage is a concrete post-v1 target this eval surfaced.
 - **The spine advances slowly: 1 beat in 35 turns.** The model narrates
   actions it does not commit with the `note` tool using the waypoint's
   exact text, so the server never sees the evidence. The judge's

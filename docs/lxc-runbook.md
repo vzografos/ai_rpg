@@ -35,12 +35,15 @@ docker load < /tmp/ai-rpg-dev.tar.gz
 On the CT, next to wherever you keep app config (e.g. `/srv/ai-rpg`):
 
 ```sh
-mkdir -p /srv/ai-rpg && cd /srv/ai-rpg
-cp <repo>/docker/compose.yml .
-# point build: context/dockerfile at nothing — prod uses the loaded image;
-# or keep the repo copy and run with -f as below.
+mkdir -p /srv/ai-rpg/docker && cd /srv/ai-rpg
+cp <repo>/docker/compose.yml docker/compose.yml
 cp <repo>/.env.example .env && $EDITOR .env
 ```
+
+Keep the compose file under `docker/`: its relative paths are part of the
+contract (`env_file: ../.env` resolves to `/srv/ai-rpg/.env`, and the build
+context `..` to `/srv/ai-rpg`). The `prod` service runs the image loaded above,
+so do not pass `--build` on the CT.
 
 `.env` — fill in the model endpoint (any OpenAI-compatible server):
 
@@ -51,14 +54,16 @@ LLM_MODEL=...
 LLM_TIMEOUT=120
 ```
 
-Local model option: add `--profile ollama` and pull the weights once
-(`docker compose ... exec ollama ollama pull llama3.1:8b`), or point
-`LLM_BASE_URL` at a vLLM/Ollama on another box (that is what production does).
+Local model option: start the sibling with `--profile ollama` and pull the
+weights once
+(`docker compose -f docker/compose.yml --profile ollama exec ollama ollama pull llama3.1:8b`),
+or point `LLM_BASE_URL` at a vLLM/Ollama on another box (that is what
+production does).
 
 ## 4. Run
 
 ```sh
-docker compose -f docker/compose.yml --profile prod up -d prod
+docker compose -f docker/compose.yml --profile prod up -d --no-build prod
 curl -s localhost:8080/api/status | head -c 200   # expect: milestone + progress
 ```
 
@@ -69,9 +74,10 @@ The `prod` service is hardened: non-root (uid 10001), read-only rootfs,
 ## 5. Operate
 
 ```sh
-docker compose -f docker/compose.yml logs -f prod     # follow
-docker compose -f docker/compose.yml restart prod     # restart
-docker compose -f docker/compose.yml pull && up -d prod  # after a new image load
+docker compose -f docker/compose.yml --profile prod logs -f prod     # follow
+docker compose -f docker/compose.yml --profile prod restart prod     # restart
+# after loading a new image tarball (replaces the ai-rpg:dev tag):
+docker compose -f docker/compose.yml --profile prod up -d --no-build --force-recreate prod
 ```
 
 Backup = the data volume:
@@ -81,8 +87,11 @@ docker run --rm -v ai-rpg_rpg-data:/data -v "$PWD":/backup alpine \
   tar czf /backup/rpg-data-$(date +%F).tar.gz -C /data .
 ```
 
-Restore: `docker compose down`, replace the volume contents, `up -d`.
-Wipe-and-restart: `docker compose down -v && up -d` (loses the world).
+Restore: `docker compose -f docker/compose.yml --profile prod down`, replace
+the volume contents, then `docker compose -f docker/compose.yml --profile prod
+up -d --no-build prod`.
+Wipe-and-restart: `docker compose -f docker/compose.yml --profile prod down -v`
+then the same `up -d --no-build prod` (loses the world).
 
 ## 6. Verify after any change
 

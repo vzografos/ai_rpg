@@ -9,7 +9,7 @@ depends on.
 
 ## Milestone index
 
-| # | Name | Acceptance in one line | Status as of 2026-11-01 |
+| # | Name | Acceptance in one line | Status as of 2026-11-07 |
 |---|---|---|---|
 | M0 | Skeleton | `docker compose up` serves the page on :8080 with a working LLM ping; `make check` green; host has only Docker | Implemented; live provider and production HTTP smoke passed. `make up` was verified on :8080 after the Compose service-profile fix (2026-11-01); host-only-Docker check was not repeated. |
 | M1 | Deterministic core | 100% engine path coverage; `roll` byte-identical under the same seed; spell slots; zero LLM | SRD 5.1 single-class slot progression, spending, and rest recovery implemented; 100% current engine statement coverage enforced by `make test` and `make check`. Spell lists/casting effects and multiclassing remain out of scope. |
@@ -569,7 +569,7 @@ surfaced what the structural layer cannot: **paraphrased secret leaks**
 (saboteur turns 5/8/9/10, explorer turns 4/9/15) and **dice-first misses
 in prose** — the DM narrating engine-unsupported outcomes ("the wight's
 death and 150 XP") in phrasing the number-whitelist forgery checker does
-not treat as a number claim. That gap is the concrete M7 target. The
+not treat as a number claim. That gap is a concrete post-v1 target. The
 spine advanced **1 beat in 35 turns**: the model narrates actions it
 does not commit with `note` using the waypoint's exact text, so the
 server never sees the evidence — the judge's `beat_progress` reads
@@ -688,3 +688,66 @@ profiles.
 **Verified:** `make up` started only `app` on :8080, created the
 `ai-rpg_rpg-data` volume, and `/api/status` returned 200. The volume was
 present; the failure was the port collision.
+
+### Repo review — 2026-11-07
+
+A full static review of the checkout against the roadmap in this repo. **No tests
+or containers were run for this review**; every completion claim cites
+recorded evidence (latest gate: Docker `make check`, 409 passed, 2 skipped,
+100% engine statement coverage, 2026-10-31; qwen38 eval reports, 2026-11-01).
+
+**State:** M0–M4 and M6 are complete. M5's implementation is complete (52-turn
+fake-LLM memory test and save/load round-trip pass), but its defining
+real-model acceptance — a turn-5 fact still shaping turn 50 in a 50+ turn
+qwen38 session — remains open. The 30-turn probe still shows summary/fact
+truncation and duplicate `note` emissions (116 `fact_add` events, 111 duplicate
+triples, on turn 27).
+
+**Documentation corrected in this pass:**
+
+- `README.md` — current-state section added; quickstart renamed; stale
+  milestone statuses fixed (M3 complete, M4 documented, M6 complete); layout
+  completed (`sheet.py`, `memory.py`, `session.py`, `eval/`,
+  `tests/conformance/`, `tests/eval/`, `docs/`, `evals/`); `tests/loop/` →
+  `tests/dm/`; usage, sessions, evaluation, deployment, and documentation map
+  added.
+- `evals/README.md` — "M7 target" → "post-v1 target"; run command uses the
+  `test` profile; `--no-llm-judge` documented; reports marked as qwen38
+  2026-11-01 snapshots.
+- `docs/lxc-runbook.md` — removed the invalid `... pull && up -d prod`
+  command; fixed the compose-file placement so its relative `env_file`/build
+  context resolve; clarified image update/recreate flow.
+- `src/rpg/cli.py` — removed the stale "commands will land in M4" docstring.
+- `tests/__init__.py` — layout docstring now lists the actual suites
+  (`engine`, `dm`, `web`, `llm`, `redline`, `conformance`, `eval`) instead of
+  the non-existent `tests/loop/`.
+- `AGENTS.md` — SSE grammar now includes `quest`/`beat`; added docs-sync and
+  review-only (no test execution) rules.
+- `src/rpg/content/shadow_crown.json` — `"milestone": "M3"` → `"M6"`.
+- `Makefile` — `make pull-model` help now says `model=<name>`.
+
+**Code / design findings (recorded, not changed):**
+
+1. **Layering inversion (medium).** `engine/state.py` and `engine/events.py`
+   import `StorySpine` from `rpg.dm.spine`; `engine/context.py` imports
+   `rpg.llm.prompts`. The deterministic engine depends on the DM and LLM
+   layers — no runtime defect today, but a reuse/testing and import-cycle
+   hazard. Move the spine model to `engine/` (or a neutral module) and pass
+   prompt text into the context builder.
+2. **Eval runner always exits 0 (low).** `src/rpg/eval/run.py:296` prints the
+   structural-finding count and returns 0. That is the report-only design, but
+   it is not a CI gate; add `--strict` or document the contract.
+3. **Judge axis values are not validated (low).** `judge_turn` keeps only the
+   four known keys but accepts arbitrary values; validate against the allowed
+   sets in the prompt.
+4. **Dead prompt helpers (low).** `FINALIZER_USER`, `opening_user`,
+   `SPINE_GEN_SYSTEM`, and `spine_gen_user` have no callers;
+   `action_messages` is used only by the M0 `say` CLI path.
+5. **`spine_now=None` type mismatch (low).** `dm/loop.py:231` passes `None` to
+   `build_context(spine_now: str = "")`; harmless by truthiness, wrong by hint.
+6. **Formatting not gated (low, process).** `ruff format` is still outside
+   `make check` (23 pre-existing unformatted files) — decide gate-or-ignore
+   before post-v1 work.
+
+Full detail, completion matrix, and post-v1 recommendations:
+[`docs/repo-review-2026-11-07.md`](repo-review-2026-11-07.md).

@@ -1,5 +1,5 @@
 """Skeleton layout pin (M0): every module from the documented layout exists and imports,
-the static page ships in-repo, and the adventure stub is valid JSON.
+the static page ships in-repo, and the pre-authored adventure is valid JSON.
 
 M1+ tests replace this as the modules grow — keep this file as the layout
 guard.

@@ -33,5 +33,5 @@ check: lint test ## Lint + tests, all in-container (M0 acceptance gate)
 shell: ## Debug shell inside the dev image (e.g. uv run python -m rpg.cli ping)
 	$(COMPOSE) --profile dev run --rm --entrypoint sh app
 
-pull-model: ## Pull a model into the sibling ollama service (ARG=model)
+pull-model: ## Pull a model into the sibling ollama service (model=<name>)
 	$(COMPOSE) --profile ollama exec ollama ollama pull $(model)
